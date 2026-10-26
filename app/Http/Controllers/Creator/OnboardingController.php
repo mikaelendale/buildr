@@ -97,10 +97,19 @@ class OnboardingController extends Controller
         return redirect('/onboarding/verify');
     }
 
-    public function saveBasics(CreatorBasicsRequest $request, CreatorProfileService $profiles): RedirectResponse
+    public function saveBasics(CreatorBasicsRequest $request, CreatorProfileService $profiles, OnboardingProgress $progress): RedirectResponse
     {
         $creator = $request->user()->creator;
         $profiles->updateBasics($creator, $request->validated());
+
+        // A channel already in the directory keeps its profile when claimed,
+        // so there is nothing to build: straight on to the review.
+        if ($progress->for($creator)['ready']) {
+            $this->advance($creator, 6);
+
+            return redirect('/onboarding/review');
+        }
+
         $this->advance($creator, 5);
 
         return redirect('/onboarding/building');

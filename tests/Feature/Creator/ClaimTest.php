@@ -107,6 +107,12 @@ it('keeps an existing profile when its channel is claimed: no rescrape, no AI ru
 
     Bus::assertNotDispatched(ProcessChannel::class);
     Bus::assertNotDispatched(FetchChannelInfo::class);
+
+    // Nothing to build: basics leads straight to the review.
+    $user->creator->forceFill(['onboarding_step' => 4])->save();
+    $this->actingAs($user)->post('/onboarding/basics', [
+        'display_name' => 'Listed', 'slug' => 'listed-builder', 'timezone' => 'Africa/Addis_Ababa',
+    ])->assertRedirect('/onboarding/review');
 });
 
 it('verifies a claim once when two checks race', function () {

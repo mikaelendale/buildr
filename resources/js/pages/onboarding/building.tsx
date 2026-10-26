@@ -47,7 +47,7 @@ export default function BuildingStep({
                 step={step}
                 steps={steps}
                 title="Building your profile"
-                description="This can take a few minutes. We'll message you on Telegram when it's ready."
+                description="This can take a few minutes. Your progress is saved, so you can leave and come back."
             />
 
             <ChannelProgressTray progress={progress} />
