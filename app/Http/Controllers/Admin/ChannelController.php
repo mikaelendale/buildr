@@ -209,6 +209,20 @@ class ChannelController extends Controller
         return back();
     }
 
+    /**
+     * Detach a claimed channel from its creator (wrong account, or someone
+     * else runs it). Posts stay; the page is rewritten as unclaimed.
+     */
+    public function release(Request $request, Channel $channel, OwnershipActions $actions): RedirectResponse
+    {
+        abort_unless($channel->isClaimed(), 422);
+        $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+
+        $actions->releaseChannel($channel, $request->user(), (string) ($request->input('reason') ?: 'Released by admin'));
+
+        return $this->done("@{$channel->username} is unclaimed again; its page is being rewritten.");
+    }
+
     public function rescrape(Request $request, Channel $channel): RedirectResponse
     {
         $channel->forceFill(['failure_count' => 0, 'last_error' => null, 'scrape_status' => ScrapeStatus::Queued])->save();

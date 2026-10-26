@@ -57,6 +57,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'admin
         Route::put('channels/{channel}', [ChannelController::class, 'update'])->name('channels.update');
         Route::post('channels/{channel}/rescrape', [ChannelController::class, 'rescrape'])->name('channels.rescrape');
         Route::post('channels/{channel}/reprocess', [ChannelController::class, 'reprocess'])->name('channels.reprocess');
+        Route::post('channels/{channel}/release', [ChannelController::class, 'release'])->name('channels.release');
         Route::delete('channels/{channel}', [ChannelController::class, 'destroy'])->name('channels.destroy');
         Route::post('suggestions/{suggestion}/dismiss', [ChannelController::class, 'dismissSuggestion'])->name('suggestions.dismiss');
 

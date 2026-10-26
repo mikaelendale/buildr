@@ -200,6 +200,16 @@ export default function AdminChannel({
                                 Publish
                             </Button>
                         ))}
+                    {channel.claim_status === 'claimed' && (
+                        <NoteAction
+                            label="Release from owner"
+                            title={`Release @${channel.username}`}
+                            url={`/admin/channels/${channel.id}/release`}
+                            field="reason"
+                            required={false}
+                            description="Detaches it from the creator. Posts stay; the page is rewritten as an unclaimed channel and waits for review."
+                        />
+                    )}
                     <NoteAction
                         label="Remove + blocklist"
                         title={`Remove @${channel.username}`}

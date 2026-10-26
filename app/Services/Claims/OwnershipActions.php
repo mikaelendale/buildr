@@ -116,6 +116,50 @@ class OwnershipActions
         }
     }
 
+    /**
+     * Detach a channel from the creator who claimed it, keeping its posts: it
+     * becomes an unclaimed page again (hidden until reviewed) and its profile
+     * is rewritten in unclaimed mode, so it no longer describes that person.
+     * For channels claimed by the wrong account, or run by someone else.
+     */
+    public function releaseChannel(Channel $channel, ?User $by, string $reason): void
+    {
+        $creator = $channel->creator;
+
+        DB::transaction(function () use ($channel, $creator) {
+            $channel->overrides()->where('source', ContentSource::Creator)->delete();
+            $channel->projects()->where('source', ContentSource::Creator)->delete();
+            $channel->projects()->update(['creator_id' => null]);
+
+            $channel->forceFill([
+                'creator_id' => null,
+                'claim_status' => ChannelClaimStatus::Unclaimed,
+                'visibility' => ChannelVisibility::Hidden,
+                'review_status' => null,
+                ...Channel::PAGE_DEFAULTS,
+            ])->save();
+
+            // The old claim no longer stands; a real owner can verify again.
+            Claim::where('channel_id', $channel->id)->where('status', ClaimStatus::Verified)->update(['status' => ClaimStatus::Expired]);
+
+            if ($creator !== null && $creator->primary_channel_id === $channel->id) {
+                $creator->forceFill(['primary_channel_id' => $creator->channels()->where('id', '!=', $channel->id)->where('claim_status', ChannelClaimStatus::Claimed)->value('id')])->save();
+            }
+        });
+
+        Storage::disk('public')->delete(OgImageRenderer::path('channel', $channel->id));
+        $this->indexer->refreshChannel($channel);
+
+        if ($creator !== null) {
+            $this->indexer->refreshCreator($creator);
+        }
+
+        AuditLog::record('channel.released', $channel, ['creator_id' => $creator?->id, 'reason' => $reason], $by);
+
+        // Rewrite the page about the channel, not a person.
+        ProcessChannel::dispatch($channel->id, 'summary_start', null, 1, 'admin');
+    }
+
     public function transferChannel(Channel $channel, User $to): void
     {
         $old = $channel->creator;

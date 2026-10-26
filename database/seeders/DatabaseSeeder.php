@@ -19,8 +19,6 @@ class DatabaseSeeder extends Seeder
             CuratedTagSeeder::class,
         ]);
 
-        if (app()->environment('local')) {
-            $this->call(DemoSeeder::class);
-        }
+        // Demo creators and channels are opt-in: php artisan db:seed --class=DemoSeeder
     }
 }
