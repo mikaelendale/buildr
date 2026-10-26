@@ -46,6 +46,14 @@ function publishedChannel(string $username, string $title): Channel
 
 beforeEach(fn () => Storage::fake('public'));
 
+it('counts home page visits and shows the total, ignoring bots', function () {
+    $this->get('/', ['User-Agent' => 'Mozilla/5.0 Chrome/130'])->assertOk();
+    $this->get('/', ['User-Agent' => 'TelegramBot (like TwitterBot)'])->assertOk();
+
+    $this->get('/', ['User-Agent' => 'Mozilla/5.0 Chrome/130'])
+        ->assertInertia(fn (Assert $page) => $page->where('counts.visits', 2));
+});
+
 it('renders the landing page with featured and trending profiles', function () {
     $creator = publishedCreator('selam', 'Selam', 'selambuilds');
     FeaturedItem::create(['featurable_type' => 'creator', 'featurable_id' => $creator->id]);

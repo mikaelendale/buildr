@@ -17,7 +17,7 @@ type Props = {
     trending: Card[];
     recent: Card[];
     tags: TagChip[];
-    counts: { profiles: number; claimed: number };
+    counts: { profiles: number; claimed: number; visits: number };
 };
 
 const POINTS: { glyph: GlyphName; body: string }[] = [
@@ -76,6 +76,16 @@ export default function Home({
                         {counts.profiles > 0
                             ? `${counts.profiles.toLocaleString()} builders and counting`
                             : 'The Telegram builder directory'}
+                        {counts.visits > 0 && (
+                            <>
+                                <span aria-hidden="true" className="text-border">
+                                    ·
+                                </span>
+                                <span className="tabular">
+                                    {counts.visits.toLocaleString()} visits
+                                </span>
+                            </>
+                        )}
                     </span>
 
                     <Display as="h1" size="xl" lead="Find out who's" stack>

@@ -7,13 +7,17 @@ use App\Models\Creator;
 use App\Models\DirectoryEntry;
 use App\Models\FeaturedItem;
 use App\Models\Tag;
+use App\Services\Analytics\ViewTracker;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class HomeController extends Controller
 {
-    public function __invoke(): Response
+    public function __invoke(Request $request, ViewTracker $views): Response
     {
+        $views->recordPage('/', $request);
+
         $creator = (new Creator)->getMorphClass();
 
         // A featured creator shows as their main listed channel.
@@ -51,6 +55,7 @@ class HomeController extends Controller
             'counts' => [
                 'profiles' => DirectoryEntry::visible()->count(),
                 'claimed' => DirectoryEntry::visible()->where('is_claimed', true)->count(),
+                'visits' => ViewTracker::pageTotal('/'),
             ],
         ]);
     }

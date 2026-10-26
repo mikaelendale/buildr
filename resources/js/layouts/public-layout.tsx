@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { ArrowUpRight, Menu, Search } from 'lucide-react';
+import { ArrowUpRight, Menu, Moon, Search, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Logo from '@/components/brand/logo';
 import SocialIcon from '@/components/profile/social-icon';
@@ -11,6 +11,7 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
+import { useAppearance } from '@/hooks/use-appearance';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -42,6 +43,8 @@ export default function PublicLayout({
     const { auth, supportTelegram, maker } = page.props;
     const [open, setOpen] = useState(false);
     const scrolled = useScrolled();
+    const { resolvedAppearance, updateAppearance } = useAppearance();
+    const dark = resolvedAppearance === 'dark';
     // Unmatched URLs render the error page without shared props (no auth).
     const user = auth?.user;
     const accountHref = user
@@ -104,6 +107,15 @@ export default function PublicLayout({
                             <Link href="/search">
                                 <Search />
                             </Link>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={dark ? 'Use light mode' : 'Use dark mode'}
+                            title={dark ? 'Light mode' : 'Dark mode'}
+                            onClick={() => updateAppearance(dark ? 'light' : 'dark')}
+                        >
+                            {dark ? <Sun /> : <Moon />}
                         </Button>
                         <Button
                             asChild
