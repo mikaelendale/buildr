@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Auth\TelegramLoginController;
+use App\Http\Controllers\Auth\CreatorLoginController;
 use App\Http\Controllers\Creator\ChannelController;
 use App\Http\Controllers\Creator\ClaimController;
 use App\Http\Controllers\Creator\DashboardController;
@@ -15,17 +15,18 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Telegram login (plan §5.1) + bot webhook (§5.3)
+| Creator login (email + password, web only) + bot webhook (§5.3)
 |--------------------------------------------------------------------------
 */
 
 Route::middleware('guest')->group(function () {
-    Route::get('login', [TelegramLoginController::class, 'create'])->name('telegram.login');
-    Route::post('auth/telegram/callback', [TelegramLoginController::class, 'store'])->middleware('throttle:10,1')->name('telegram.callback');
-    Route::post('auth/dev-login', [TelegramLoginController::class, 'devLogin'])->name('telegram.dev-login');
+    Route::get('login', [CreatorLoginController::class, 'create'])->name('creator.login');
+    Route::post('login', [CreatorLoginController::class, 'login'])->middleware('throttle:20,1')->name('creator.login.store');
+    Route::post('register', [CreatorLoginController::class, 'register'])->middleware('throttle:6,1')->name('creator.register');
+    Route::post('auth/dev-login', [CreatorLoginController::class, 'devLogin'])->name('creator.dev-login');
 });
 
-Route::post('logout', [TelegramLoginController::class, 'destroy'])->middleware('auth')->name('creator.logout');
+Route::post('logout', [CreatorLoginController::class, 'destroy'])->middleware('auth')->name('creator.logout');
 Route::post('telegram/webhook', TelegramWebhookController::class)->name('telegram.webhook');
 
 Route::get('claim', [ClaimPageController::class, 'claim'])->name('claim');

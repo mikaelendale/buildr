@@ -5,6 +5,7 @@ use App\Http\Controllers\Public\ChannelSuggestionController;
 use App\Http\Controllers\Public\CreatorProfileController;
 use App\Http\Controllers\Public\DiscoverController;
 use App\Http\Controllers\Public\HomeController;
+use App\Http\Controllers\Public\MediaController;
 use App\Http\Controllers\Public\ReportController;
 use App\Http\Controllers\Public\SearchController;
 use App\Http\Controllers\Public\SeoController;
@@ -32,6 +33,7 @@ Route::get('sitemap.xml', [SeoController::class, 'sitemap'])->name('sitemap');
 Route::get('robots.txt', [SeoController::class, 'robots'])->name('robots');
 Route::get('og/{type}/{id}.png', [SeoController::class, 'og'])->whereNumber('id')->name('og');
 Route::get('share-card/{type}/{id}.png', ShareCardController::class)->whereNumber('id')->middleware('throttle:60,1')->name('share-card');
+Route::get('media/{path}', MediaController::class)->where('path', 'avatars/[a-z]+/\d+/[a-f0-9]{10}-\d+\.jpg')->name('media');
 
 Route::post('reports', [ReportController::class, 'store'])->middleware('throttle:reports')->name('reports.store');
 Route::post('channel-suggestions', [ChannelSuggestionController::class, 'store'])->middleware('throttle:suggest-channel')->name('channel-suggestions.store');

@@ -44,7 +44,7 @@ class TelegramWebhookController extends Controller
 
             $reply = $user !== null
                 ? '👋 You\'re connected. We\'ll message you here about your Buildr profile. Your dashboard: '.url('/dashboard')
-                : '👋 Welcome to Buildr! Log in with Telegram to claim your channel: '.url('/login');
+                : '👋 Welcome to Buildr! Log in to claim your channel: '.url('/login');
 
             $this->reply($bot, $chatId, $reply);
         } elseif (str_starts_with($text, '/stop')) {

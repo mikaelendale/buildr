@@ -44,6 +44,20 @@ const PORTRAIT: Record<
     rose: { light: ['#c2335f', '#f6b3c6'], dark: ['#ec7a9c', '#fad0dc'] },
 };
 
+/**
+ * WebGL only takes cross-origin images with CORS headers; avatars on the
+ * storage bucket's domain come through /media on our own origin instead.
+ */
+function sameOrigin(src: string): string {
+    if (typeof window === 'undefined') {
+        return src;
+    }
+
+    const url = new URL(src, window.location.href);
+
+    return url.origin === window.location.origin ? src : `/media${url.pathname}`;
+}
+
 // A soft vignette: fades toward the content (left), the page edge (right),
 // under the header (top) and into the page (bottom). No hard edges.
 const PORTRAIT_MASK =
@@ -112,7 +126,7 @@ export function PortraitDither({
                     <ImageDithering
                         className="absolute inset-0"
                         style={{ width: '100%', height: '100%' }}
-                        image={avatar}
+                        image={sameOrigin(avatar)}
                         colorBack="#00000000"
                         colorFront={front}
                         colorHighlight={highlight}

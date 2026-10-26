@@ -3,7 +3,6 @@
 use App\Models\Creator;
 use App\Models\LoginEvent;
 use App\Models\User;
-use App\Services\Telegram\TelegramLoginVerifier;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -11,67 +10,40 @@ beforeEach(function () {
     Queue::fake();
 });
 
-function signedPayload(array $overrides = []): array
-{
-    $payload = array_merge([
-        'id' => 424242,
-        'first_name' => 'Selam',
-        'last_name' => 'Tesfaye',
-        'username' => 'SelamBuilds',
-        'photo_url' => 'https://t.me/i/userpic/320/selam.jpg',
-        'auth_date' => time(),
-    ], $overrides);
-
-    $payload['hash'] = app(TelegramLoginVerifier::class)->sign($payload, '123456:TEST-TOKEN');
-
-    return $payload;
-}
-
-it('verifies a correctly signed widget payload', function () {
-    expect(app(TelegramLoginVerifier::class)->verify(signedPayload()))->toBeTrue();
-});
-
-it('rejects tampered, unsigned and stale payloads', function () {
-    $verifier = app(TelegramLoginVerifier::class);
-
-    $tampered = signedPayload();
-    $tampered['id'] = 1;
-
-    $stale = signedPayload(['auth_date' => time() - 90_000]);
-
-    $unsigned = signedPayload();
-    unset($unsigned['hash']);
-
-    expect($verifier->verify($tampered))->toBeFalse()
-        ->and($verifier->verify($stale))->toBeFalse()
-        ->and($verifier->verify($unsigned))->toBeFalse()
-        ->and($verifier->verify(signedPayload(), 'other-token'))->toBeFalse();
-});
-
-it('logs a new creator in and sends them to onboarding', function () {
-    $this->post('/auth/telegram/callback', signedPayload())
+it('creates a creator account and sends them to onboarding', function () {
+    $this->post('/register', ['name' => 'Selam Tesfaye', 'email' => 'Selam@Example.com', 'password' => 'long-password-1'])
         ->assertRedirect('/onboarding');
 
-    $user = User::where('telegram_id', 424242)->first();
+    $user = User::where('email', 'selam@example.com')->first();
 
     $this->assertAuthenticatedAs($user);
-    expect($user->telegram_username)->toBe('selambuilds')
-        ->and($user->name)->toBe('Selam Tesfaye')
-        ->and(LoginEvent::where('user_id', $user->id)->where('method', 'telegram')->exists())->toBeTrue();
+    expect($user->isAdmin())->toBeFalse()
+        ->and(LoginEvent::where('user_id', $user->id)->where('method', 'register')->exists())->toBeTrue();
 });
 
-it('sends returning creators to the dashboard', function () {
-    $user = User::factory()->create(['telegram_id' => 424242]);
+it('logs creators in with email and password', function () {
+    $user = User::factory()->create(['email' => 'selam@example.com', 'password' => 'long-password-1']);
     Creator::factory()->for($user)->create();
 
-    $this->post('/auth/telegram/callback', signedPayload())->assertRedirect('/dashboard');
+    $this->post('/login', ['email' => 'selam@example.com', 'password' => 'wrong-password'])->assertSessionHasErrors('email');
+    $this->assertGuest();
+
+    $this->post('/login', ['email' => 'SELAM@example.com', 'password' => 'long-password-1'])->assertRedirect('/dashboard');
+    $this->assertAuthenticatedAs($user);
 });
 
-it('refuses invalid payloads', function () {
-    $payload = signedPayload();
-    $payload['hash'] = str_repeat('0', 64);
+it('never lets an admin skip 2FA through the creator login', function () {
+    User::factory()->admin()->create(['email' => 'root@example.com', 'password' => 'long-password-1']);
 
-    $this->post('/auth/telegram/callback', $payload)->assertSessionHasErrors('telegram');
+    $this->post('/login', ['email' => 'root@example.com', 'password' => 'long-password-1'])->assertSessionHasErrors('email');
+    $this->assertGuest();
+});
+
+it('rejects duplicate emails and short passwords', function () {
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    $this->post('/register', ['name' => 'A', 'email' => 'taken@example.com', 'password' => 'long-password-1'])->assertSessionHasErrors('email');
+    $this->post('/register', ['name' => 'A', 'email' => 'new@example.com', 'password' => 'short'])->assertSessionHasErrors('password');
     $this->assertGuest();
 });
 

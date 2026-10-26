@@ -42,12 +42,14 @@ export default function PublicLayout({
     const { auth, supportTelegram, maker } = page.props;
     const [open, setOpen] = useState(false);
     const scrolled = useScrolled();
-    const accountHref = auth.user
-        ? auth.user.is_admin
+    // Unmatched URLs render the error page without shared props (no auth).
+    const user = auth?.user;
+    const accountHref = user
+        ? user.is_admin
             ? '/admin'
             : '/dashboard'
         : '/login';
-    const accountLabel = auth.user ? 'Dashboard' : 'Log in';
+    const accountLabel = user ? 'Dashboard' : 'Log in';
 
     return (
         <div className="relative flex min-h-svh flex-col bg-background">
@@ -202,6 +204,7 @@ export default function PublicLayout({
                         </nav>
                     </div>
                     <div className="flex flex-col gap-4 border-t border-border/70 py-6 sm:flex-row sm:items-center sm:justify-between">
+                        {maker && (
                         <p className="text-sm text-muted-foreground">
                             Made with{' '}
                             <span role="img" aria-label="love">
@@ -217,8 +220,9 @@ export default function PublicLayout({
                                 @{maker.handle}
                             </a>
                         </p>
+                        )}
                         <div className="flex items-center gap-1">
-                            {maker.links.map((link) => (
+                            {maker?.links.map((link) => (
                                 <a
                                     key={link.url + link.platform}
                                     href={link.url}

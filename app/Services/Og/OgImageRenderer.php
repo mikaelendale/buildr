@@ -241,7 +241,20 @@ class OgImageRenderer
                 $this->text($image, $label, $fx, 506, 20, color: self::MUTED);
             }
 
-            $this->text($image, $this->displayUrl($url), $x, 562, 24, bold: true, color: $ink);
+            // The link, shrunk to the column; a very long one falls back to the bare domain.
+            $link = $this->displayUrl($url);
+            $size = 24;
+
+            while ($size > 17 && $this->textWidth($link, $size, bold: true) > 1128 - $x) {
+                $size--;
+            }
+
+            if ($this->textWidth($link, $size, bold: true) > 1128 - $x) {
+                $link = Str::before($link, '/');
+                $size = 24;
+            }
+
+            $this->text($image, $link, $x, 562, $size, bold: true, color: $ink);
 
             Storage::disk('public')->put($path, (string) $image->encode(new PngEncoder));
 

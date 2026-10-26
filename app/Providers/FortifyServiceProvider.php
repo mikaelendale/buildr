@@ -16,7 +16,7 @@ use Laravel\Fortify\Fortify;
 
 /**
  * Fortify only handles admin accounts (email + password + TOTP) under /admin.
- * Creators log in with the Telegram Login Widget (TelegramLoginController).
+ * Creators log in with email + password on /login (CreatorLoginController).
  */
 class FortifyServiceProvider extends ServiceProvider
 {
