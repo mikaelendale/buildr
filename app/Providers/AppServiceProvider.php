@@ -53,7 +53,8 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureDevCommands(): void
     {
-        DevCommands::artisan('queue:listen --queue=scrape,ai,default,media --tries=3 --timeout=0', 'queue');
+        // Quick jobs (scrapes, avatar downloads) first so long AI runs never starve them.
+        DevCommands::artisan('queue:listen --queue=scrape,media,default,ai --tries=3 --timeout=0', 'queue');
         DevCommands::artisan('schedule:work', 'scheduler');
     }
 

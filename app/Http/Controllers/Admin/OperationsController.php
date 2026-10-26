@@ -8,7 +8,9 @@ use App\Models\AiRun;
 use App\Models\AuditLog;
 use App\Models\Channel;
 use App\Models\Setting;
+use App\Services\Admin\PipelineStatus;
 use App\Services\Ai\AiBudget;
+use App\Services\Ai\AiLanes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -24,9 +26,29 @@ use Laravel\Horizon\Horizon;
  */
 class OperationsController extends Controller
 {
-    public function jobs(): Response
+    public function jobs(PipelineStatus $pipeline, AiLanes $lanes): Response
     {
+        $jobs = collect($pipeline->queuedJobs());
+        $names = Channel::whereIn('id', $jobs->pluck('channel_id')->filter()->unique())->pluck('username', 'id');
+        $withChannel = fn (array $job) => [...$job, 'channel' => $job['channel_id'] !== null ? ($names[$job['channel_id']] ?? null) : null];
+
         return Inertia::render('admin/jobs', [
+            // What the workers are doing right now, and what's next.
+            'running' => $jobs->where('running', true)->map($withChannel)->values(),
+            'waiting' => $jobs->where('running', false)->sortBy('available_at')->take(25)->map($withChannel)->values(),
+            'recentAi' => AiRun::latest('id')->limit(20)->get()->map(fn (AiRun $r) => [
+                'id' => $r->id,
+                'job' => $r->job,
+                'model' => $r->model,
+                'status' => $r->status,
+                'tokens' => $r->input_tokens + $r->output_tokens,
+                'duration_ms' => $r->duration_ms,
+                'error' => $r->error !== null ? mb_substr($r->error, 0, 160) : null,
+                'at' => $r->created_at?->toIso8601String(),
+                'channel' => $r->subject_type === 'channel' ? Channel::find($r->subject_id)?->username : null,
+            ]),
+            'lanes' => $lanes->status(),
+            'quota' => $this->quotaPause(),
             'queues' => DB::table('jobs')->select('queue', DB::raw('count(*) as count'))->groupBy('queue')->pluck('count', 'queue'),
             'failed' => DB::table('failed_jobs')->latest('failed_at')->limit(50)->get()->map(fn ($job) => [
                 'uuid' => $job->uuid,

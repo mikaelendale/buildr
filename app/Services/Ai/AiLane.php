@@ -3,8 +3,9 @@
 namespace App\Services\Ai;
 
 /**
- * One provider the pipeline can send work to: its models per kind of call,
- * the context budget its prompts are built with, and its rate limits.
+ * One route the pipeline can send work to: a provider and its model(s), the
+ * context budget prompts are built with, a quality tier (1 strong, 2 solid,
+ * 3 light) and the route's rate limits.
  */
 final class AiLane
 {
@@ -19,6 +20,10 @@ final class AiLane
         public readonly int $tokensPerMinute = 0,
         public readonly int $requestsPerMinute = 0,
         public readonly int $timeout = 600,
+        public readonly int $tier = 1,
+        public readonly int $requestsPerDay = 0,
+        /** Whether the model takes a thinking level (Gemma on the Gemini API doesn't). */
+        public readonly bool $thinking = true,
     ) {}
 
     public function model(string $kind): string

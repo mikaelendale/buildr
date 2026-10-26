@@ -9,6 +9,8 @@ import {
     postAction,
     StatusBadge,
 } from '@/components/admin/ui';
+import { PipelineStage, useLiveReload } from '@/components/admin/pipeline';
+import type { Pipeline } from '@/components/admin/pipeline';
 import type { Paginated } from '@/components/admin/ui';
 import PageContainer from '@/components/page-container';
 import { Button } from '@/components/ui/button';
@@ -26,6 +28,7 @@ type Row = {
     scrape_status: string;
     last_scraped_at: string | null;
     cost: number;
+    pipeline: Pipeline | null;
 };
 
 type Props = {
@@ -46,6 +49,14 @@ export default function AdminChannels({
 }: Props) {
     const [q, setQ] = useState(filters.q ?? '');
     const page = usePage();
+
+    // Stages update live while any channel on this page has work queued.
+    useLiveReload(
+        channels.data.some(
+            (c) => (c.pipeline?.queued ?? 0) > 0 || c.pipeline?.tone === 'sky',
+        ),
+        ['channels'],
+    );
     const results = (
         page.flash as
             | {
@@ -201,8 +212,8 @@ export default function AdminChannels({
                     { label: 'Subscribers', className: 'text-right' },
                     'Claim',
                     'Visibility',
+                    'Pipeline',
                     'Availability',
-                    'Scrape',
                     'Last scraped',
                     { label: 'AI cost', className: 'text-right' },
                 ]}
@@ -232,10 +243,10 @@ export default function AdminChannels({
                             <StatusBadge value={c.visibility} />
                         </td>
                         <td>
-                            <StatusBadge value={c.availability} />
+                            <PipelineStage pipeline={c.pipeline} />
                         </td>
                         <td>
-                            <StatusBadge value={c.scrape_status} />
+                            <StatusBadge value={c.availability} />
                         </td>
                         <td className="tabular font-mono text-xs whitespace-nowrap text-muted-foreground">
                             {formatDate(c.last_scraped_at)}

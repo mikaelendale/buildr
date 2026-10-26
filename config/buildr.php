@@ -69,60 +69,31 @@ return [
         'budget_profile' => env('BUILDR_AI_BUDGET_PROFILE', 'standard'),
 
         /*
-        | Lanes: providers the pipeline rotates between, in order (e.g.
-        | "gemini,groq"). Each has its own models, budget profile and rate
-        | limits; a lane that runs out of quota or is overloaded hands the
-        | step to the next. Empty = one lane from the settings above.
+        | Smart routing (AiLanes): the providers to use (e.g. "gemini,groq").
+        | Every call picks the best route below for the step: allowed quality
+        | tier first (strong models for the writer, fact-checker and project
+        | resolver; light ones for labelling and digests), then recent health,
+        | headroom this minute and against the daily cap, taking turns between
+        | equals. A route that fails hands over to the next best. Empty = one
+        | lane from the classic settings above.
         */
         'lanes' => array_values(array_filter(array_map('trim', explode(',', (string) env('BUILDR_AI_LANES', ''))))),
 
-        'lane_options' => [
-            'gemini' => [
-                'provider' => 'gemini',
-                'budget' => 'roomy',
-                // Free tier: few requests, lots of tokens per request.
-                'tokens_per_minute' => (int) env('BUILDR_AI_GEMINI_TPM', 200000),
-                'requests_per_minute' => (int) env('BUILDR_AI_GEMINI_RPM', 8),
-                'timeout_seconds' => 240,
-                'models' => [
-                    'extraction' => env('BUILDR_AI_GEMINI_EXTRACTION_MODEL', 'gemini-3.5-flash-lite'),
-                    'synthesis' => env('BUILDR_AI_GEMINI_SYNTHESIS_MODEL', 'gemini-3.5-flash'),
-                    'verify' => env('BUILDR_AI_GEMINI_VERIFY_MODEL', 'gemini-3.5-flash'),
-                ],
-            ],
-            'groq' => [
-                'provider' => 'groq',
-                'budget' => 'compact',
-                'tokens_per_minute' => (int) env('BUILDR_AI_GROQ_TPM', env('BUILDR_AI_TOKENS_PER_MINUTE', 7500)),
-                'requests_per_minute' => (int) env('BUILDR_AI_GROQ_RPM', 30),
-                'timeout_seconds' => 300,
-                'models' => [
-                    'extraction' => env('BUILDR_AI_GROQ_EXTRACTION_MODEL', 'openai/gpt-oss-20b'),
-                    'synthesis' => env('BUILDR_AI_GROQ_SYNTHESIS_MODEL', 'openai/gpt-oss-120b'),
-                    'verify' => env('BUILDR_AI_GROQ_VERIFY_MODEL', 'openai/gpt-oss-120b'),
-                ],
-            ],
-            'anthropic' => [
-                'provider' => 'anthropic',
-                'budget' => 'standard',
-                'models' => [
-                    'extraction' => 'claude-haiku-5-5',
-                    'synthesis' => 'claude-opus-5-5',
-                    'verify' => 'claude-opus-5-5',
-                ],
-            ],
-        ],
-
-        // How each step picks a lane: "rotate" takes turns (high-volume steps,
-        // so free quotas add up); "prefer" uses the first lane with quota
-        // left, in BUILDR_AI_LANES order (one-shot steps that shape the page).
-        'roles' => [
-            'extraction' => env('BUILDR_AI_ROLE_EXTRACTION', 'rotate'),
-            'digest' => env('BUILDR_AI_ROLE_DIGEST', 'rotate'),
-            'describe' => env('BUILDR_AI_ROLE_DESCRIBE', 'rotate'),
-            'resolve' => env('BUILDR_AI_ROLE_RESOLVE', 'prefer'),
-            'writer' => env('BUILDR_AI_ROLE_WRITER', 'prefer'),
-            'verify' => env('BUILDR_AI_ROLE_VERIFY', 'prefer'),
+        // tier: 1 strong, 2 solid, 3 light. rpm/tpm/rpd: free-tier limits
+        // (0 = unknown); quotas are per model, so every route adds capacity.
+        'routes' => [
+            ['provider' => 'gemini', 'model' => 'gemini-3.5-flash', 'tier' => 1, 'budget' => 'roomy', 'rpm' => 8, 'tpm' => 200000, 'timeout' => 240],
+            ['provider' => 'gemini', 'model' => 'gemini-3.6-flash', 'tier' => 1, 'budget' => 'roomy', 'rpm' => 8, 'tpm' => 200000, 'timeout' => 240],
+            ['provider' => 'gemini', 'model' => 'gemini-3-flash-preview', 'tier' => 1, 'budget' => 'roomy', 'rpm' => 5, 'rpd' => 20, 'tpm' => 200000, 'timeout' => 240],
+            ['provider' => 'groq', 'model' => 'openai/gpt-oss-120b', 'tier' => 2, 'budget' => 'compact', 'rpm' => 30, 'tpm' => 7500, 'timeout' => 300],
+            ['provider' => 'groq', 'model' => 'qwen/qwen3.8-27b', 'tier' => 2, 'budget' => 'compact', 'rpm' => 30, 'tpm' => 6000, 'timeout' => 300],
+            ['provider' => 'gemini', 'model' => 'gemma-4-31b-it', 'tier' => 2, 'budget' => 'compact', 'rpm' => 15, 'tpm' => 15000, 'timeout' => 240, 'thinking' => false],
+            ['provider' => 'gemini', 'model' => 'gemini-3.5-flash-lite', 'tier' => 3, 'budget' => 'roomy', 'rpm' => 15, 'tpm' => 250000, 'timeout' => 240],
+            ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite', 'tier' => 3, 'budget' => 'roomy', 'rpm' => 15, 'tpm' => 250000, 'timeout' => 240],
+            ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite-preview', 'tier' => 3, 'budget' => 'roomy', 'rpm' => 15, 'tpm' => 250000, 'timeout' => 240],
+            ['provider' => 'groq', 'model' => 'openai/gpt-oss-20b', 'tier' => 3, 'budget' => 'compact', 'rpm' => 30, 'tpm' => 7500, 'timeout' => 300],
+            ['provider' => 'anthropic', 'model' => 'claude-opus-5-5', 'tier' => 1, 'budget' => 'standard'],
+            ['provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'tier' => 3, 'budget' => 'standard'],
         ],
 
         'budgets' => [
@@ -199,15 +170,11 @@ return [
             ],
         ],
 
-        // When a model's daily quota is spent, switch once to a model with its
-        // own quota before pausing the pipeline (Groq caps tokens per model).
+        // Classic single-lane setups: when a model's daily quota is spent, switch
+        // to a model with its own quota before pausing (routing doesn't need this).
         'fallback_models' => [
             'openai/gpt-oss-120b' => env('BUILDR_AI_FALLBACK_FOR_120B', 'openai/gpt-oss-20b'),
             'openai/gpt-oss-20b' => env('BUILDR_AI_FALLBACK_FOR_20B', 'openai/gpt-oss-120b'),
-            // Gemini quotas are per model too. Flash never falls back to a lite
-            // model: the writer and fact-checker go to the next lane instead.
-            'gemini-3.5-flash' => 'gemini-3-flash-preview',
-            'gemini-3.5-flash-lite' => 'gemini-3.1-flash-lite',
         ],
 
         // Products, models and platforms that are never a channel author's own
@@ -232,6 +199,9 @@ return [
             'gemini-3-flash-preview' => ['input' => 0.30, 'output' => 2.50, 'cache_read' => 0.03],
             'gemini-3.5-flash-lite' => ['input' => 0.10, 'output' => 0.40, 'cache_read' => 0.01],
             'gemini-3.1-flash-lite' => ['input' => 0.10, 'output' => 0.40, 'cache_read' => 0.01],
+            'gemini-3.1-flash-lite-preview' => ['input' => 0.10, 'output' => 0.40, 'cache_read' => 0.01],
+            'gemini-3.6-flash' => ['input' => 0.30, 'output' => 2.50, 'cache_read' => 0.03],
+            'gemma-4-31b-it' => ['input' => 0.10, 'output' => 0.40, 'cache_read' => 0.01],
         ],
     ],
 

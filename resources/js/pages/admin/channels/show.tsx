@@ -10,7 +10,11 @@ import {
     postAction,
     StatusBadge,
 } from '@/components/admin/ui';
+import { PipelineStage, useLiveReload } from '@/components/admin/pipeline';
+import type { Pipeline } from '@/components/admin/pipeline';
 import type { Paginated } from '@/components/admin/ui';
+import AiRunList from '@/components/admin/ai-run-list';
+import type { AiRunRow } from '@/components/admin/ai-run-list';
 import VerificationReport from '@/components/admin/verification-report';
 import PageContainer from '@/components/page-container';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +59,8 @@ type Props = {
         cost: number;
     };
     summaries: SummaryVersion[];
+    pipeline: Pipeline;
+    aiRuns: AiRunRow[];
     posts: Paginated<{
         msg_id: number;
         posted_at: string | null;
@@ -93,7 +99,21 @@ function Meta({
     );
 }
 
-export default function AdminChannel({ channel, summaries, posts }: Props) {
+export default function AdminChannel({
+    channel,
+    summaries,
+    posts,
+    pipeline,
+    aiRuns,
+}: Props) {
+    // Live while the channel has work queued or running.
+    useLiveReload(pipeline.queued > 0 || pipeline.tone === 'sky', [
+        'pipeline',
+        'aiRuns',
+        'channel',
+        'summaries',
+    ]);
+
     const [left, setLeft] = useState(summaries[1]?.id ?? summaries[0]?.id);
     const [right, setRight] = useState(summaries[0]?.id);
     const [tab, setTab] = useState<'posts' | 'history' | 'stats'>('history');
@@ -192,6 +212,22 @@ export default function AdminChannel({ channel, summaries, posts }: Props) {
                 </>
             }
         >
+            <Card title="Pipeline">
+                <div className="grid gap-5 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                    <div className="space-y-2">
+                        <PipelineStage pipeline={pipeline} />
+                        <p className="text-xs text-muted-foreground">
+                            {pipeline.posts} posts scraped
+                            {pipeline.queued > 0 &&
+                                ` · ${pipeline.queued} job${pipeline.queued === 1 ? '' : 's'} queued`}
+                            {pipeline.attempts > 1 &&
+                                ` · attempt ${pipeline.attempts}`}
+                        </p>
+                    </div>
+                    <AiRunList runs={aiRuns} empty="No AI calls yet." />
+                </div>
+            </Card>
+
             <div className="flex flex-wrap items-center gap-1.5">
                 <StatusBadge value={channel.claim_status} />
                 <StatusBadge value={channel.visibility} />

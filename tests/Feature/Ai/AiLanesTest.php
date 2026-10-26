@@ -1,9 +1,11 @@
 <?php
 
 use App\Ai\Agents\PostExtractor;
+use App\Ai\Agents\ProfileWriter;
 use App\Ai\Agents\ProjectResolver;
 use App\Enums\ContentSource;
 use App\Enums\ProjectStatus;
+use App\Enums\SummaryMode;
 use App\Models\AiRun;
 use App\Models\Channel;
 use App\Models\Post;
@@ -12,71 +14,106 @@ use App\Models\Project;
 use App\Services\Ai\AiLane;
 use App\Services\Ai\AiLanes;
 use App\Services\Ai\AiRunner;
+use App\Services\Ai\Exceptions\AiQuotaExhaustedException;
 use App\Services\Ai\ProjectBuilder;
 use App\Services\Ai\Prompts;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 
+/**
+ * A small pool: one strong and one solid route, two light ones.
+ */
 beforeEach(function () {
     config([
         'buildr.ai.lanes' => ['gemini', 'groq'],
-        'buildr.ai.lane_options.gemini.tokens_per_minute' => 0,
-        'buildr.ai.lane_options.gemini.requests_per_minute' => 0,
-        'buildr.ai.lane_options.groq.tokens_per_minute' => 0,
-        'buildr.ai.lane_options.groq.requests_per_minute' => 0,
+        'ai.providers.gemini.key' => 'test',
+        'ai.providers.groq.key' => 'test',
+        'buildr.ai.routes' => [
+            ['provider' => 'gemini', 'model' => 'flash', 'tier' => 1, 'budget' => 'roomy'],
+            ['provider' => 'groq', 'model' => 'big-oss', 'tier' => 2, 'budget' => 'compact'],
+            ['provider' => 'gemini', 'model' => 'flash-lite', 'tier' => 3, 'budget' => 'roomy'],
+            ['provider' => 'groq', 'model' => 'small-oss', 'tier' => 3, 'budget' => 'compact', 'rpd' => 2],
+        ],
     ]);
 });
 
-function runExtraction(): array
+function runStep(string $role = 'extraction'): array
 {
-    return app(AiRunner::class)->run('extraction', 'extract_posts', fn (AiLane $lane, string $model) => [new PostExtractor($model), 'posts'], null);
+    return app(AiRunner::class)->run($role, 'step', fn (AiLane $lane, string $model) => [
+        $role === 'writer' ? new ProfileWriter($model, SummaryMode::Unclaimed) : new PostExtractor($model),
+        'input',
+    ], null);
 }
 
-it('takes turns between lanes for high-volume steps', function () {
+it('spreads light work across equally good routes and keeps strong models for the writer', function () {
     PostExtractor::fake(fn () => ['posts' => []]);
+    ProfileWriter::fake(fn () => ['hook' => 'x']);
 
-    runExtraction();
-    runExtraction();
-    runExtraction();
+    runStep();
+    runStep();
+    runStep('writer');
 
-    expect(AiRun::orderBy('id')->pluck('model')->all())
-        ->toBe(['gemini-3.5-flash-lite', 'openai/gpt-oss-20b', 'gemini-3.5-flash-lite']);
+    expect(AiRun::orderBy('id')->pluck('model')->all())->toBe(['flash-lite', 'small-oss', 'flash']);
 });
 
-it('hands a step to the next lane when a provider is overloaded', function () {
-    config(['buildr.ai.roles.extraction' => 'prefer', 'buildr.ai.fallback_models' => []]);
+it('moves to the next best route when one is overloaded, and remembers it', function () {
     $calls = 0;
 
-    PostExtractor::fake(function () use (&$calls) {
+    ProfileWriter::fake(function () use (&$calls) {
         if (++$calls === 1) {
             throw ProviderOverloadedException::forProvider('gemini');
         }
 
-        return ['posts' => []];
+        return ['hook' => 'x'];
     });
 
-    runExtraction();
+    runStep('writer');
+
+    $lanes = app(AiLanes::class);
 
     expect(AiRun::orderBy('id')->get(['model', 'status'])->toArray())->toBe([
-        ['model' => 'gemini-3.5-flash-lite', 'status' => 'error'],
-        ['model' => 'openai/gpt-oss-20b', 'status' => 'ok'],
-    ])->and(app(AiLanes::class)->blockedFor('gemini', 'gemini-3.5-flash-lite'))->toBeGreaterThan(0);
-
-    // While Gemini cools down, the next step goes straight to Groq.
-    runExtraction();
-    expect(AiRun::latest('id')->value('model'))->toBe('openai/gpt-oss-20b');
+        ['model' => 'flash', 'status' => 'error'],
+        ['model' => 'big-oss', 'status' => 'ok'],
+    ])->and($lanes->blockedFor('gemini', 'flash'))->toBeGreaterThan(0)
+        ->and($lanes->health('gemini', 'flash'))->toBeGreaterThan(0.0)
+        ->and($lanes->pick('writer', advance: false)?->model('synthesis'))->toBe('big-oss');
 });
 
-it('loads the Gemini wording of a prompt on the Gemini lane only', function () {
+it('never hands quality steps to light models, and pauses instead', function () {
+    $lanes = app(AiLanes::class);
+    $lanes->block('gemini', 'flash', 600, true);
+    $lanes->block('groq', 'big-oss', 600, true);
+
+    expect($lanes->pick('writer'))->toBeNull();
+
+    ProfileWriter::fake(fn () => ['hook' => 'x']);
+
+    expect(fn () => runStep('writer'))->toThrow(AiQuotaExhaustedException::class);
+    expect(AiRun::count())->toBe(0);
+});
+
+it('stops using a route at its daily request cap', function () {
+    PostExtractor::fake(fn () => ['posts' => []]);
+    $lanes = app(AiLanes::class);
+    $lanes->block('gemini', 'flash-lite', 600, true);
+
+    runStep();
+    runStep();
+    runStep();
+
+    // small-oss allows 2 a day; the third light call moves up to the solid route.
+    expect(AiRun::orderBy('id')->pluck('model')->all())->toBe(['small-oss', 'small-oss', 'big-oss'])
+        ->and($lanes->usedToday('groq', 'small-oss'))->toBe(2);
+});
+
+it('loads the Gemini wording of a prompt on Gemini routes only', function () {
     $prompts = app(Prompts::class);
-    $lanes = app(AiLanes::class)->all();
+    $gemini = collect(app(AiLanes::class)->all())->firstWhere('provider', 'gemini');
+    $groq = collect(app(AiLanes::class)->all())->firstWhere('provider', 'groq');
 
-    $gemini = AiLanes::using($lanes[0], fn () => $prompts->get('extraction'));
-    $groq = AiLanes::using($lanes[1], fn () => $prompts->get('extraction'));
-
-    expect($gemini)->toContain('<fields>')
-        ->and($groq)->not->toContain('<fields>')
-        ->and(AiLanes::using($lanes[0], fn () => $prompts->message('{}', 'posts', 'Task first.', 'Task last.')))->toBe("<posts>\n{}\n</posts>\n\nTask last.")
-        ->and(AiLanes::using($lanes[1], fn () => $prompts->message('{}', 'posts', 'Task first.', 'Task last.')))->toBe("Task first.\n\n{}");
+    expect(AiLanes::using($gemini, fn () => $prompts->get('extraction')))->toContain('<fields>')
+        ->and(AiLanes::using($groq, fn () => $prompts->get('extraction')))->not->toContain('<fields>')
+        ->and(AiLanes::using($gemini, fn () => $prompts->message('{}', 'posts', 'Task first.', 'Task last.')))->toBe("<posts>\n{}\n</posts>\n\nTask last.")
+        ->and(AiLanes::using($groq, fn () => $prompts->message('{}', 'posts', 'Task first.', 'Task last.')))->toBe("Task first.\n\n{}");
 });
 
 it('never turns forwards, shared links or AI models into the author\'s projects', function () {

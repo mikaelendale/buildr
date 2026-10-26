@@ -18,6 +18,7 @@ use App\Models\ChannelSuggestion;
 use App\Models\Post;
 use App\Models\Summary;
 use App\Services\Admin\AdminActions;
+use App\Services\Admin\PipelineStatus;
 use App\Services\Claims\OwnershipActions;
 use App\Support\TelegramUsername;
 use Illuminate\Http\RedirectResponse;
@@ -30,7 +31,7 @@ use Inertia\Response;
  */
 class ChannelController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, PipelineStatus $pipeline): Response
     {
         $search = trim((string) $request->query('q'));
 
@@ -48,6 +49,8 @@ class ChannelController extends Controller
         $costs = AiRun::where('subject_type', 'channel')->whereIn('subject_id', $channels->pluck('id'))
             ->groupBy('subject_id')->selectRaw('subject_id, sum(cost_usd_est) as cost')->pluck('cost', 'subject_id');
 
+        $stages = $pipeline->forChannels($channels->getCollection());
+
         return Inertia::render('admin/channels/index', [
             'channels' => $channels->through(fn (Channel $c) => [
                 'id' => $c->id,
@@ -60,6 +63,7 @@ class ChannelController extends Controller
                 'scrape_status' => $c->scrape_status->value,
                 'last_scraped_at' => $c->last_scraped_at?->toIso8601String(),
                 'cost' => round((float) ($costs[$c->id] ?? 0), 4),
+                'pipeline' => $stages[$c->id] ?? null,
             ]),
             'filters' => $request->only(['q', 'claim', 'visibility', 'scrape']),
             'suggestions' => ChannelSuggestion::where('status', 'open')->latest()->limit(20)->get(['id', 'username', 'created_at']),
@@ -121,13 +125,27 @@ class ChannelController extends Controller
         return redirect('/admin/channels');
     }
 
-    public function show(Channel $channel): Response
+    public function show(Channel $channel, PipelineStatus $pipeline): Response
     {
         $channel->load(['creator', 'stats']);
 
         $posts = Post::where('channel_id', $channel->id)->with('extraction')->latest('msg_id')->paginate(30);
 
         return Inertia::render('admin/channels/show', [
+            'pipeline' => $pipeline->forChannel($channel),
+            'aiRuns' => AiRun::where(fn ($q) => $q->where('subject_type', 'channel')->where('subject_id', $channel->id))
+                ->orWhere(fn ($q) => $q->where('subject_type', 'summary')->whereIn('subject_id', $channel->summaries()->pluck('id')))
+                ->latest('id')->limit(12)->get()
+                ->map(fn (AiRun $r) => [
+                    'id' => $r->id,
+                    'job' => $r->job,
+                    'model' => $r->model,
+                    'status' => $r->status,
+                    'tokens' => $r->input_tokens + $r->output_tokens,
+                    'duration_ms' => $r->duration_ms,
+                    'error' => $r->error !== null ? mb_substr($r->error, 0, 200) : null,
+                    'at' => $r->created_at?->toIso8601String(),
+                ]),
             'channel' => $channel->only(['id', 'username', 'title', 'description', 'subscribers', 'timezone', 'failure_count', 'last_error', 'backfill_complete', 'newest_msg_id', 'oldest_msg_id']) + [
                 'claim_status' => $channel->claim_status->value,
                 'visibility' => $channel->visibility->value,

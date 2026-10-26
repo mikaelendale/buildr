@@ -91,7 +91,7 @@ class AiRunner
 
                     $plannedHere = $prefer === null || $prefer->name === $lane->name;
 
-                    if (! $plannedHere && $lane->tokensPerMinute > 0 && $estimate > $lane->tokensPerMinute) {
+                    if (($canHandOff || ! $plannedHere) && $lane->tokensPerMinute > 0 && $estimate > $lane->tokensPerMinute) {
                         throw new AiQuotaExhaustedException("[{$job}] ~{$estimate} tokens is over {$lane->name}'s per-minute limit.", 60);
                     }
 
@@ -164,8 +164,11 @@ class AiRunner
                     timeout: $lane->timeout,
                 );
 
+                $this->lanes->record($lane->provider, $model, true);
+
                 break;
             } catch (RateLimitedException $e) {
+                $this->lanes->record($lane->provider, $model, false);
                 $wait = $this->retryAfter($e);
                 $daily = $this->isDailyLimit($e, $wait);
 
@@ -192,6 +195,7 @@ class AiRunner
                 throw new AiQuotaExhaustedException($this->describe($e), max(30, $wait), $e);
             } catch (ProviderOverloadedException|ProviderConnectionException $e) {
                 // "High demand" and timeouts pass; let the model sit out a little.
+                $this->lanes->record($lane->provider, $model, false);
                 $this->log($job, $model, $subject, null, 'error', $this->describe($e), $started);
                 $this->lanes->block($lane->provider, $model, self::COOLDOWN_SECONDS, false);
 
@@ -309,7 +313,7 @@ class AiRunner
             return;
         }
 
-        $key = 'ai-tpm:'.$lane->provider.':'.$model;
+        $key = AiLanes::windowKey($lane->provider, $model);
 
         while (true) {
             $now = now()->getTimestampMs() / 1000;

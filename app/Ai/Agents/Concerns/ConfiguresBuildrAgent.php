@@ -3,6 +3,7 @@
 namespace App\Ai\Agents\Concerns;
 
 use App\Services\Ai\AiBudgets;
+use App\Services\Ai\AiLanes;
 use App\Services\Ai\Prompts;
 use Laravel\Ai\Enums\Lab;
 
@@ -41,15 +42,16 @@ trait ConfiguresBuildrAgent
         // Gemini 3: the output cap includes thinking tokens. Labelling and
         // short descriptions need little or no thinking; the writer, the
         // fact-checker and the project resolver weigh evidence, so medium.
+        // Some models (Gemma) take no thinking level at all; "low" is the floor
+        // every Gemini 3 model accepts.
         if ($provider === 'gemini') {
-            return [
+            return array_filter([
                 'max_output_tokens' => $this->outputTokenBudget(),
-                'thinking_level' => match (class_basename($this)) {
+                'thinking_level' => AiLanes::active()?->thinking === false ? null : match (class_basename($this)) {
                     'ProfileWriter', 'ClaimChecker', 'ProjectResolver' => 'medium',
-                    'ProjectDescriber' => 'minimal',
                     default => 'low',
                 },
-            ];
+            ]);
         }
 
         if ($provider !== 'anthropic') {

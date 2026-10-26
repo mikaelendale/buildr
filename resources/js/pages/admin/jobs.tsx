@@ -1,11 +1,113 @@
 import { Link, router } from '@inertiajs/react';
 import { ArrowUpRight } from 'lucide-react';
+import AiRunList from '@/components/admin/ai-run-list';
+import type { AiRunRow } from '@/components/admin/ai-run-list';
+import { useLiveReload } from '@/components/admin/pipeline';
 import { Card, Counter, DataTable, postAction } from '@/components/admin/ui';
 import PageContainer from '@/components/page-container';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+type QueuedJob = {
+    id: number;
+    queue: string;
+    name: string;
+    channel_id: number | null;
+    channel: string | null;
+    step: string | null;
+    running: boolean;
+    attempts: number;
+    available_at: number;
+};
+
+type Lane = {
+    name: string;
+    provider: string;
+    models: Record<
+        string,
+        {
+            model: string;
+            tier: number;
+            blocked_for: number | null;
+            daily: boolean;
+            /** Recent failure rate, 0 healthy to 1 failing. */
+            health: number;
+            today: number;
+            rpd: number;
+        }
+    >;
+};
+
+const STEP_LABELS: Record<string, string> = {
+    extract: 'labelling posts',
+    projects: 'finding projects',
+    stats: 'counting stats',
+    summary_start: 'writing digests',
+    summary_map: 'writing digests',
+    summary_reduce: 'writing profile',
+    verify: 'fact-checking',
+    index: 'finishing',
+    og: 'finishing',
+    done: 'finishing',
+};
+
+function wait(seconds: number): string {
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+
+    if (seconds < 3600) {
+        return `${Math.round(seconds / 60)}m`;
+    }
+
+    return `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+}
+
+function JobRow({ job }: { job: QueuedJob }) {
+    const delay = job.available_at - Math.floor(Date.now() / 1000);
+
+    return (
+        <li className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2 text-xs first:pt-0 last:pb-0">
+            {job.running && (
+                <span className="relative flex size-1.5 text-sky">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60 motion-reduce:animate-none" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-current" />
+                </span>
+            )}
+            <span className="font-mono font-medium">{job.name}</span>
+            {job.step && (
+                <Badge variant="sky">{STEP_LABELS[job.step] ?? job.step}</Badge>
+            )}
+            {job.channel && (
+                <Link
+                    href={`/admin/channels/${job.channel_id}`}
+                    className="font-mono text-muted-foreground hover:text-foreground"
+                >
+                    @{job.channel}
+                </Link>
+            )}
+            <span className="ml-auto font-mono whitespace-nowrap text-ink-soft">
+                {job.queue}
+                {job.attempts > 1 && ` · try ${job.attempts}`}
+                {!job.running && delay > 5 && ` · in ${wait(delay)}`}
+            </span>
+        </li>
+    );
+}
+
 type Props = {
+    running: QueuedJob[];
+    waiting: QueuedJob[];
+    recentAi: AiRunRow[];
+    lanes: Lane[];
+    quota: {
+        channels: {
+            id: number;
+            username: string | null;
+            step: string;
+            until: string;
+        }[];
+    } | null;
     queues: Record<string, number>;
     failed: {
         uuid: string;
@@ -26,6 +128,11 @@ type Props = {
 };
 
 export default function AdminJobs({
+    running,
+    waiting,
+    recentAi,
+    lanes,
+    quota,
     queues,
     failed,
     scrapingPaused,
@@ -33,6 +140,17 @@ export default function AdminJobs({
     failingChannels,
     horizon,
 }: Props) {
+    // Live while workers have anything to do.
+    useLiveReload(running.length + waiting.length > 0, [
+        'running',
+        'waiting',
+        'recentAi',
+        'lanes',
+        'quota',
+        'queues',
+        'failed',
+    ]);
+
     return (
         <PageContainer
             title="Jobs"
@@ -78,6 +196,116 @@ export default function AdminJobs({
                     alert={failed.length > 0}
                 />
             </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+                <Card
+                    title="Workers"
+                    actions={
+                        running.length > 0 ? (
+                            <Badge variant="sky">
+                                {running.length} running
+                            </Badge>
+                        ) : (
+                            <Badge
+                                variant="outline"
+                                className="text-muted-foreground"
+                            >
+                                idle
+                            </Badge>
+                        )
+                    }
+                >
+                    {running.length === 0 && waiting.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            Nothing running or queued. If you expected work
+                            here, check that a queue worker is running.
+                        </p>
+                    ) : (
+                        <ul className="divide-y divide-border/70">
+                            {[...running, ...waiting].map((job) => (
+                                <JobRow key={job.id} job={job} />
+                            ))}
+                        </ul>
+                    )}
+                </Card>
+
+                <Card title="AI routes">
+                    <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                            Each call goes to the best free model for the step:
+                            T1 strong (writer, fact-check, projects), T3 light
+                            (labelling, digests), T2 either.
+                        </p>
+                        {lanes.map((lane) => (
+                            <div key={lane.name}>
+                                <div className="mb-1.5 font-mono text-xs font-medium">
+                                    {lane.name}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {Object.values(lane.models).map((m) => (
+                                        <Badge
+                                            key={m.model}
+                                            variant={
+                                                m.blocked_for === null
+                                                    ? 'mint'
+                                                    : m.daily
+                                                      ? 'rose'
+                                                      : 'amber'
+                                            }
+                                            className="font-mono"
+                                        >
+                                            T{m.tier} {m.model}
+                                            {m.today > 0 &&
+                                                ` · ${m.today}${m.rpd > 0 ? `/${m.rpd}` : ''} today`}
+                                            {m.blocked_for === null &&
+                                                m.health >= 0.3 &&
+                                                ' · flaky'}
+                                            {m.blocked_for !== null &&
+                                                (m.daily
+                                                    ? ` · out for ${wait(m.blocked_for)}`
+                                                    : ` · cooling ${wait(m.blocked_for)}`)}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        {quota && quota.channels.length > 0 && (
+                            <div className="border-t border-border/70 pt-3 text-xs">
+                                <div className="mb-1.5 text-muted-foreground">
+                                    Waiting for quota
+                                </div>
+                                {quota.channels.map((c) => (
+                                    <div
+                                        key={c.id}
+                                        className="flex justify-between gap-2 font-mono"
+                                    >
+                                        <Link
+                                            href={`/admin/channels/${c.id}`}
+                                            className="hover:underline"
+                                        >
+                                            @{c.username}
+                                        </Link>
+                                        <span className="text-ink-soft">
+                                            {STEP_LABELS[c.step] ?? c.step} ·{' '}
+                                            {new Date(
+                                                c.until,
+                                            ).toLocaleTimeString()}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </Card>
+            </div>
+
+            <Card title="AI calls">
+                <AiRunList
+                    runs={recentAi}
+                    empty="No AI calls yet."
+                    showChannel
+                />
+            </Card>
 
             <Card
                 title="Scraper"
