@@ -29,7 +29,7 @@ class SummaryGenerator
      * What each stat measures, so a fun fact can't turn "per month" into
      * "per week" while still matching the number.
      */
-    private const STAT_UNITS = [
+    public const STAT_UNITS = [
         'total_posts' => 'posts collected so far (not necessarily every post since the channel began)',
         'posts_per_week' => 'average posts per week over the last 90 days',
         'longest_streak_weeks' => 'longest run of consecutive weeks with at least one post',

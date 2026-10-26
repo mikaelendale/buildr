@@ -17,6 +17,7 @@
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
+        "league/flysystem-aws-s3-v3": "^3.35",
         "symfony/css-selector": "^8.1",
         "symfony/dom-crawler": "^8.1"
     },
