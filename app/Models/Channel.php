@@ -280,10 +280,17 @@ class Channel extends Model
 
         $creator = $this->creator;
 
-        return $this->page_visible
-            && $creator !== null
-            && $creator->isPublished()
-            && ! $creator->user?->isBanned();
+        if ($creator === null || $creator->user?->isBanned()) {
+            return false;
+        }
+
+        // While the owner is still onboarding or in review, a page that was
+        // already public stays up as it was (claiming must not take it down).
+        if (! $creator->isPublished()) {
+            return $this->visibility === ChannelVisibility::Published;
+        }
+
+        return $this->page_visible;
     }
 
     /**
@@ -291,7 +298,8 @@ class Channel extends Model
      */
     public function showsOwner(): bool
     {
-        return $this->isClaimed() && $this->creator !== null && $this->show_owner;
+        // Owner details appear once their page is approved.
+        return $this->isClaimed() && $this->creator?->isPublished() === true && $this->show_owner;
     }
 
     public function displayTitle(): string

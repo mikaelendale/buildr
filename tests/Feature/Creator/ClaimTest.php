@@ -108,6 +108,9 @@ it('keeps an existing profile when its channel is claimed: no rescrape, no AI ru
     Bus::assertNotDispatched(ProcessChannel::class);
     Bus::assertNotDispatched(FetchChannelInfo::class);
 
+    // The page stays up while its owner is still onboarding.
+    $this->get('/c/listedchannel')->assertOk();
+
     // Nothing to build: basics leads straight to the review.
     $user->creator->forceFill(['onboarding_step' => 4])->save();
     $this->actingAs($user)->post('/onboarding/basics', [
