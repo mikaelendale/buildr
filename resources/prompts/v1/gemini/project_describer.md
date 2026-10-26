@@ -1,0 +1,1 @@
+<task>For each project in <projects> (key, name, posts), write `description`: one plain sentence ≤25 words on what it is and who it's for, from the posts only. No hype words. If the posts don't say, write exactly "Mentioned in the channel; details are still to come."</task>

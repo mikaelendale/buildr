@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
+        <env name="DB_URL" value=""/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="BUILDR_SCRAPE_MIN_DELAY_MS" value="0"/>
+        <env name="BUILDR_SCRAPE_JITTER_MS" value="0"/>
+        <env name="BUILDR_SNAPSHOT_DISK" value="local"/>
+        <env name="TELEGRAM_BOT_TOKEN" value=""/>
+        <env name="TELEGRAM_BOT_USERNAME" value="BuildrTestBot"/>
+        <env name="TELEGRAM_ADMIN_CHAT_ID" value=""/>
+        <env name="ANTHROPIC_API_KEY" value="test-key"/>
+        <env name="AI_DEFAULT_PROVIDER" value="anthropic"/>
+        <env name="BUILDR_AI_PROVIDER" value="anthropic"/>
+        <env name="BUILDR_AI_EXTRACTION_MODEL" value="claude-haiku-5-5"/>
+        <env name="BUILDR_AI_SYNTHESIS_MODEL" value="claude-opus-5-5"/>
+        <env name="BUILDR_AI_VERIFY_MODEL" value="claude-opus-5-5"/>
+        <env name="BUILDR_AI_BUDGET_PROFILE" value="standard"/>
+        <env name="BUILDR_AI_LANES" value=""/>
+        <env name="GEMINI_API_KEY" value=""/>
+        <env name="GROQ_API_KEY" value=""/>
+        <env name="INERTIA_SSR_ENABLED" value="false"/>
+    </php>
+</phpunit>
