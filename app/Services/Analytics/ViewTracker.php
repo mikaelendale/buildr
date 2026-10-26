@@ -35,11 +35,12 @@ class ViewTracker
     }
 
     /**
-     * Every recorded visit to a page, all time.
+     * Visitors to a page, all time: each person counts once a day, so
+     * refreshing the page doesn't add to it.
      */
-    public static function pageTotal(string $path): int
+    public static function pageVisitors(string $path): int
     {
-        return (int) DB::table('page_visits')->where('path', $path)->sum('views');
+        return (int) DB::table('page_visits')->where('path', $path)->sum('unique_views');
     }
 
     /**

@@ -55,7 +55,7 @@ class HomeController extends Controller
             'counts' => [
                 'profiles' => DirectoryEntry::visible()->count(),
                 'claimed' => DirectoryEntry::visible()->where('is_claimed', true)->count(),
-                'visits' => ViewTracker::pageTotal('/'),
+                'visitors' => ViewTracker::pageVisitors('/'),
             ],
         ]);
     }
