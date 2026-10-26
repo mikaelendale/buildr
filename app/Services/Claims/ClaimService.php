@@ -6,7 +6,10 @@ use App\Enums\ChannelAddedBy;
 use App\Enums\ChannelClaimStatus;
 use App\Enums\ClaimPurpose;
 use App\Enums\ClaimStatus;
+use App\Enums\SummaryMode;
+use App\Enums\SummaryStatus;
 use App\Enums\TelegramPageType;
+use App\Enums\TriggeredBy;
 use App\Jobs\Ai\ProcessChannel;
 use App\Jobs\Scrape\FetchChannelInfo;
 use App\Models\AuditLog;
@@ -14,8 +17,11 @@ use App\Models\BlockedUsername;
 use App\Models\Channel;
 use App\Models\Claim;
 use App\Models\Creator;
+use App\Models\Summary;
 use App\Models\User;
+use App\Services\Directory\DirectoryIndexer;
 use App\Services\Notifications\TelegramNotifier;
+use App\Services\Og\OgImageRenderer;
 use App\Services\Telegram\Exceptions\TelegramFetchException;
 use App\Services\Telegram\TelegramWebClient;
 use App\Support\TelegramUsername;
@@ -37,6 +43,8 @@ class ClaimService
         private readonly TelegramWebClient $client,
         private readonly TelegramNotifier $notifier,
         private readonly OwnershipActions $actions,
+        private readonly DirectoryIndexer $indexer,
+        private readonly OgImageRenderer $og,
     ) {}
 
     public static function generateCode(): string
@@ -284,12 +292,39 @@ class ClaimService
 
         $this->notifier->toUser($user, "✅ <b>@{$channel->username}</b> is verified as yours. You can remove the code from your channel now.");
 
-        // An existing unclaimed page is regenerated in claimed mode (plan §6.2 #6).
-        if ($wasUnclaimedPage) {
+        // A channel already in the directory keeps its profile: claiming only
+        // proves ownership. Only channels new to Buildr are scraped and written.
+        $live = $wasUnclaimedPage ? $channel->currentSummary()->first() : null;
+
+        if ($live !== null) {
+            $this->adopt($channel, $creator, $live);
+        } elseif ($wasUnclaimedPage) {
             ProcessChannel::dispatch($channel->id, 'summary_start', null, 1, 'creator');
         } else {
             FetchChannelInfo::dispatch($channel->id, true);
         }
+    }
+
+    /**
+     * The live profile becomes the owner's (claimed mode, same content), so
+     * onboarding moves straight on: no rescrape, no AI run.
+     */
+    private function adopt(Channel $channel, Creator $creator, Summary $live): void
+    {
+        $copy = $live->replicate(['created_at', 'updated_at']);
+        $copy->forceFill([
+            'version' => (int) $channel->summaries()->max('version') + 1,
+            'mode' => SummaryMode::Claimed,
+            'status' => SummaryStatus::Verified,
+            'creator_id' => $creator->id,
+            'triggered_by' => TriggeredBy::Creator,
+            'approved_at' => null,
+        ])->save();
+
+        $channel->forceFill(['last_processed_at' => now()])->save();
+
+        $this->indexer->refreshChannel($channel);
+        $this->og->refreshForChannel($channel);
     }
 
     private function resolveDispute(Claim $winner): void

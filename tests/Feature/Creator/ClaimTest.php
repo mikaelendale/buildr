@@ -4,6 +4,8 @@ use App\Enums\ChannelClaimStatus;
 use App\Enums\ChannelVisibility;
 use App\Enums\ClaimPurpose;
 use App\Enums\ClaimStatus;
+use App\Enums\SummaryMode;
+use App\Enums\SummaryStatus;
 use App\Jobs\Ai\ProcessChannel;
 use App\Jobs\Scrape\FetchChannelInfo;
 use App\Models\BlockedUsername;
@@ -11,8 +13,10 @@ use App\Models\Channel;
 use App\Models\Claim;
 use App\Models\Creator;
 use App\Models\Post;
+use App\Models\Summary;
 use App\Models\User;
 use App\Services\Claims\ClaimService;
+use App\Services\Creators\OnboardingProgress;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
@@ -71,6 +75,37 @@ it('runs the onboarding claim flow from handle to verified channel', function ()
         ->and($claim->fresh()->found_in)->toBe('description');
 
     Bus::assertDispatched(FetchChannelInfo::class);
+});
+
+it('keeps an existing profile when its channel is claimed: no rescrape, no AI run', function () {
+    $channel = Channel::factory()->published()->create(['username' => 'listedchannel', 'backfill_complete' => true]);
+    Summary::create([
+        'channel_id' => $channel->id, 'version' => 3, 'mode' => SummaryMode::Unclaimed, 'status' => SummaryStatus::Approved,
+        'prompt_version' => 1, 'triggered_by' => 'system',
+        'content' => ['hook' => 'Ships every week.'], 'citations' => ['hook' => [1]],
+    ]);
+
+    $user = User::factory()->create();
+    Creator::factory()->for($user)->create(['onboarding_step' => 3]);
+    $claim = Claim::create([
+        'user_id' => $user->id, 'channel_username' => 'listedchannel', 'purpose' => ClaimPurpose::Claim,
+        'code' => 'BUILDR-ABC123', 'status' => ClaimStatus::Pending, 'expires_at' => now()->addDay(),
+    ]);
+    fakeChannelPages('listedchannel', 'Shipping weekly. BUILDR-ABC123');
+
+    app(ClaimService::class)->check($claim);
+
+    $summary = $channel->summaries()->latest('version')->first();
+
+    expect($claim->fresh()->status)->toBe(ClaimStatus::Verified)
+        ->and($summary->version)->toBe(4)
+        ->and($summary->mode)->toBe(SummaryMode::Claimed)
+        ->and($summary->creator_id)->toBe($user->creator->id)
+        ->and($summary->content['hook'])->toBe('Ships every week.')
+        ->and(app(OnboardingProgress::class)->forChannel($channel->fresh())['ready'])->toBeTrue();
+
+    Bus::assertNotDispatched(ProcessChannel::class);
+    Bus::assertNotDispatched(FetchChannelInfo::class);
 });
 
 it('finds codes posted in the channel too', function () {
