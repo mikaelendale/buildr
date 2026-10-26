@@ -198,12 +198,18 @@ class ClaimService
             return $claim;
         }
 
-        $claim->forceFill([
+        // Only one request may verify (the page polls while the user also
+        // clicks "Check"): a second winner would attach and process twice.
+        $won = Claim::whereKey($claim->id)->where('status', ClaimStatus::Pending)->update([
             'status' => ClaimStatus::Verified,
             'verified_at' => now(),
             'found_in' => $foundIn,
             'found_msg_id' => $msgId,
-        ])->save();
+        ]);
+
+        if ($won === 0) {
+            return $claim->refresh();
+        }
 
         DB::transaction(fn () => $this->onVerified($claim->fresh() ?? $claim));
 

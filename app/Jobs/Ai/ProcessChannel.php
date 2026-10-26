@@ -22,6 +22,7 @@ use App\Services\Ai\SummaryVerifier;
 use App\Services\Directory\DirectoryIndexer;
 use App\Services\Notifications\TelegramNotifier;
 use App\Services\Og\OgImageRenderer;
+use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -42,7 +43,11 @@ class ProcessChannel implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 5;
+    /**
+     * Waiting is not failing: a step re-queues itself while another run holds
+     * the channel lock or the AI budget is spent, so only real errors count.
+     */
+    public int $maxExceptions = 3;
 
     public int $timeout = 900;
 
@@ -194,6 +199,11 @@ class ProcessChannel implements ShouldQueue
 
         self::dispatch($this->channelId, $this->step, $this->summaryId, $this->attempt, $this->triggeredBy, $token)
             ->delay($until);
+    }
+
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addDays(2);
     }
 
     public function failed(Throwable $e): void

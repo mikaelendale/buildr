@@ -8,6 +8,7 @@ use App\Enums\SummaryMode;
 use App\Enums\SummaryStatus;
 use App\Jobs\Ai\ProcessChannel;
 use App\Jobs\Scrape\FetchChannelInfo;
+use App\Models\AuditLog;
 use App\Models\BlockedUsername;
 use App\Models\Channel;
 use App\Models\Claim;
@@ -106,6 +107,26 @@ it('keeps an existing profile when its channel is claimed: no rescrape, no AI ru
 
     Bus::assertNotDispatched(ProcessChannel::class);
     Bus::assertNotDispatched(FetchChannelInfo::class);
+});
+
+it('verifies a claim once when two checks race', function () {
+    $user = User::factory()->create();
+    Creator::factory()->for($user)->create();
+    $claim = Claim::create([
+        'user_id' => $user->id, 'channel_username' => 'racechannel', 'purpose' => ClaimPurpose::Claim,
+        'code' => 'BUILDR-ABC123', 'status' => ClaimStatus::Pending, 'expires_at' => now()->addDay(),
+    ]);
+    fakeChannelPages('racechannel', 'BUILDR-ABC123');
+
+    // Both requests loaded the claim while it was still pending.
+    $first = Claim::find($claim->id);
+    $second = Claim::find($claim->id);
+
+    app(ClaimService::class)->check($first);
+    app(ClaimService::class)->check($second);
+
+    expect(AuditLog::where('action', 'claim.verified')->count())->toBe(1);
+    Bus::assertDispatchedTimes(FetchChannelInfo::class, 1);
 });
 
 it('finds codes posted in the channel too', function () {
