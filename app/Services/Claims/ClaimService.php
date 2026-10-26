@@ -199,21 +199,52 @@ class ClaimService
         }
 
         // Only one request may verify (the page polls while the user also
-        // clicks "Check"): a second winner would attach and process twice.
-        $won = Claim::whereKey($claim->id)->where('status', ClaimStatus::Pending)->update([
-            'status' => ClaimStatus::Verified,
-            'verified_at' => now(),
-            'found_in' => $foundIn,
-            'found_msg_id' => $msgId,
-        ]);
+        // clicks "Check"), and verifying and attaching commit together: a
+        // request cut off mid-way (e.g. by a deploy) leaves the claim pending,
+        // to be found again on the next check, never verified-but-unattached.
+        DB::transaction(function () use ($claim, $foundIn, $msgId) {
+            $won = Claim::whereKey($claim->id)->where('status', ClaimStatus::Pending)->update([
+                'status' => ClaimStatus::Verified,
+                'verified_at' => now(),
+                'found_in' => $foundIn,
+                'found_msg_id' => $msgId,
+            ]);
 
-        if ($won === 0) {
-            return $claim->refresh();
-        }
-
-        DB::transaction(fn () => $this->onVerified($claim->fresh() ?? $claim));
+            if ($won === 1) {
+                $this->onVerified($claim->fresh() ?? $claim);
+            }
+        });
 
         return $claim->refresh();
+    }
+
+    /**
+     * Claims that were verified but never attached to their channel (cut off
+     * before the attach could commit). Re-runs the attach for each.
+     *
+     * @return list<string> usernames repaired
+     */
+    public function repairUnattached(): array
+    {
+        $repaired = [];
+
+        Claim::where('purpose', ClaimPurpose::Claim)
+            ->where('status', ClaimStatus::Verified)
+            ->with('user')
+            ->each(function (Claim $claim) use (&$repaired) {
+                // Attaching always leaves this audit entry; a claimed channel is
+                // theirs or a dispute, and a released one stays released.
+                $attached = AuditLog::where('action', 'claim.verified')->where('meta->claim_id', $claim->id)->exists();
+
+                if ($attached || Channel::where('username', $claim->channel_username)->first()?->isClaimed()) {
+                    return;
+                }
+
+                DB::transaction(fn () => $this->onVerified($claim));
+                $repaired[] = $claim->channel_username;
+            });
+
+        return $repaired;
     }
 
     /**

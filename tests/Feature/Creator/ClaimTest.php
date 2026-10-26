@@ -129,6 +129,29 @@ it('verifies a claim once when two checks race', function () {
     Bus::assertDispatchedTimes(FetchChannelInfo::class, 1);
 });
 
+it('repairs claims that were verified but never attached, and only those', function () {
+    $user = User::factory()->create();
+    $creator = Creator::factory()->for($user)->create();
+    Channel::factory()->published()->create(['username' => 'cutoff', 'backfill_complete' => true]);
+    Claim::create([
+        'user_id' => $user->id, 'channel_username' => 'cutoff', 'purpose' => ClaimPurpose::Claim,
+        'code' => 'BUILDR-ABC123', 'status' => ClaimStatus::Verified, 'verified_at' => now(), 'expires_at' => now()->addDay(),
+    ]);
+
+    // Attached once and later released: must stay released.
+    Channel::factory()->published()->create(['username' => 'released']);
+    $old = Claim::create([
+        'user_id' => $user->id, 'channel_username' => 'released', 'purpose' => ClaimPurpose::Claim,
+        'code' => 'BUILDR-DEF456', 'status' => ClaimStatus::Verified, 'verified_at' => now(), 'expires_at' => now()->addDay(),
+    ]);
+    AuditLog::record('claim.verified', null, ['claim_id' => $old->id]);
+
+    $this->artisan('buildr:repair-claims')->expectsOutputToContain('Repaired: @cutoff')->assertSuccessful();
+
+    expect(Channel::where('username', 'cutoff')->first()->creator_id)->toBe($creator->id)
+        ->and(Channel::where('username', 'released')->first()->isClaimed())->toBeFalse();
+});
+
 it('finds codes posted in the channel too', function () {
     $user = User::factory()->create();
     Creator::factory()->for($user)->create();
