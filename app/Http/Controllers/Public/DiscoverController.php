@@ -47,7 +47,11 @@ class DiscoverController extends Controller
 
         return Inertia::render($page, [
             'filters' => $filters,
-            'entries' => Inertia::scroll(fn () => $query->cursorPaginate(24)->withQueryString()->through(fn (DirectoryEntry $e) => $e->toCard())),
+            // The next-page cursor is read from the mapped cards, so they keep the sort columns' raw values.
+            'entries' => Inertia::scroll(fn () => $query->cursorPaginate(24)->withQueryString()->through(fn (DirectoryEntry $e) => [
+                ...$e->toCard(),
+                ...collect(['trending_score', 'published_at', 'subscribers', 'posts_per_week'])->mapWithKeys(fn (string $c) => [$c => $e->getRawOriginal($c)])->all(),
+            ])),
             'tags' => Tag::curated()->get(['slug', 'name']),
             'tag' => $tag?->only(['slug', 'name', 'description']),
         ]);

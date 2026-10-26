@@ -206,3 +206,18 @@ it('only lets the owner fetch the share card of a draft profile', function () {
     $this->actingAs(User::factory()->create())->get("/share-card/creator/{$creator->id}.png")->assertNotFound();
     $this->actingAs($creator->user)->get("/share-card/creator/{$creator->id}.png?fresh=1")->assertOk();
 });
+
+it('pages through discover with a cursor once there is more than one page', function () {
+    foreach (range(1, 30) as $i) {
+        publishedChannel("busychannel{$i}", "Busy Channel {$i}");
+    }
+
+    foreach (['trending', 'newest', 'subscribers', 'active'] as $sort) {
+        $first = $this->get("/discover?sort={$sort}")->assertOk();
+        $cursor = $first->viewData('page')['props']['entries']['meta']['next_cursor'] ?? $first->viewData('page')['props']['entries']['next_cursor'] ?? null;
+
+        expect($cursor)->not->toBeNull();
+
+        $this->get("/discover?sort={$sort}&cursor={$cursor}")->assertOk();
+    }
+});
