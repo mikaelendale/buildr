@@ -124,13 +124,15 @@ class OnboardingProgress
                 && $verifiedAt !== null && $verifiedAt->gt(now()->subDays(2))
                 && $channel->last_processed_at?->gt(now()->subMinutes(self::FINISHED_FOR_MINUTES)) === true,
             'stages' => [
-                ['key' => 'scraping', 'label' => 'Scraping your public posts', 'done' => $scraped, 'detail' => $postCount > 0 ? "{$postCount} posts" : null],
-                ['key' => 'reading', 'label' => 'Reading posts', 'done' => $scraped && ($basic || $pendingExtraction === 0),
+                // A ready channel is done everywhere (an existing page carries
+                // over on claim without re-reading posts).
+                ['key' => 'scraping', 'label' => 'Scraping your public posts', 'done' => $ready || $scraped, 'detail' => $postCount > 0 ? "{$postCount} posts" : null],
+                ['key' => 'reading', 'label' => 'Reading posts', 'done' => $ready || ($scraped && ($basic || $pendingExtraction === 0)),
                     'detail' => $toRead && $pendingExtraction !== null && ! $basic ? ($toRead - $pendingExtraction)." of {$toRead}" : null],
                 // Claiming an existing page only rewrites the summary, so a finished run counts too.
-                ['key' => 'projects', 'label' => 'Finding projects', 'done' => $scraped && ($basic || $processed
-                    || $channel->stats()->where('computed_at', '>=', $verifiedAt ?? now()->subYears(10))->exists())],
-                ['key' => 'writing', 'label' => 'Writing your profile', 'done' => $processed && ($basic || $written)],
+                ['key' => 'projects', 'label' => 'Finding projects', 'done' => $ready || ($scraped && ($basic
+                    || $channel->stats()->where('computed_at', '>=', $verifiedAt ?? now()->subYears(10))->exists()))],
+                ['key' => 'writing', 'label' => 'Writing your profile', 'done' => $ready],
             ],
         ];
     }

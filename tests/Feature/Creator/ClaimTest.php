@@ -116,6 +116,10 @@ it('keeps an existing profile when its channel is claimed: no rescrape, no AI ru
     $this->actingAs($user)->post('/onboarding/basics', [
         'display_name' => 'Listed', 'slug' => 'listed-builder', 'timezone' => 'Africa/Addis_Ababa',
     ])->assertRedirect('/onboarding/review');
+
+    // Someone already parked on the progress screen moves on too.
+    $user->creator->forceFill(['onboarding_step' => 5])->save();
+    $this->get('/onboarding/building')->assertRedirect('/onboarding/review');
 });
 
 it('verifies a claim once when two checks race', function () {

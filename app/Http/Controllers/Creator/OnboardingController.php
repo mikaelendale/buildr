@@ -54,6 +54,14 @@ class OnboardingController extends Controller
             return redirect('/onboarding/'.self::STEPS[$reached]);
         }
 
+        // Nothing left to build (e.g. an existing page that carried over on
+        // claim): don't park the creator on the progress screen.
+        if ($step === 'building' && $progress->for($creator)['ready']) {
+            $this->advance($creator, 6);
+
+            return redirect('/onboarding/review');
+        }
+
         $props = match ($step) {
             'welcome' => [],
             'channel' => ['channels' => $creator?->channels()->pluck('username')->all() ?? []],
