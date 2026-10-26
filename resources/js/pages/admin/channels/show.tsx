@@ -422,10 +422,10 @@ export default function AdminChannel({
                                         <span className="font-medium">
                                             {d.key}
                                         </span>
-                                        <pre className="overflow-x-auto whitespace-pre-wrap">
+                                        <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
                                             {d.a}
                                         </pre>
-                                        <pre className="overflow-x-auto whitespace-pre-wrap">
+                                        <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
                                             {d.b}
                                         </pre>
                                     </div>

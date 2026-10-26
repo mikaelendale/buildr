@@ -4,6 +4,7 @@ use App\Enums\ChannelAvailability;
 use App\Enums\ScrapeStatus;
 use App\Enums\TelegramPageType;
 use App\Jobs\Ai\ProcessChannel;
+use App\Jobs\Media\StoreChannelAvatar;
 use App\Jobs\Scrape\BackfillChannelPage;
 use App\Jobs\Scrape\FetchChannelInfo;
 use App\Jobs\Scrape\IncrementalScrape;
@@ -11,8 +12,10 @@ use App\Jobs\Scrape\RunScraperCanary;
 use App\Models\BlockedUsername;
 use App\Models\Channel;
 use App\Models\ChannelSnapshot;
+use App\Models\DirectoryEntry;
 use App\Models\Post;
 use App\Models\Setting;
+use App\Services\Directory\DirectoryIndexer;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -199,4 +202,16 @@ it('backfills in parallel bursts and stops at the newest 3,000 posts', function 
         ->and($ids->min())->toBe($total - 2999)
         ->and($channel->refresh()->backfill_complete)->toBeTrue()
         ->and($requests)->toBeLessThanOrEqual(152);
+});
+
+it('shows a channel photo that arrives after the channel was listed', function () {
+    fakeTelegram();
+    $channel = Channel::factory()->published()->create(['username' => 'lateavatar', 'avatar_path' => null]);
+    app(DirectoryIndexer::class)->refreshChannel($channel);
+
+    StoreChannelAvatar::dispatchSync($channel->id, 'https://cdn4.telesco.pe/file/photo.jpg');
+
+    $path = $channel->refresh()->avatar_path;
+    expect($path)->not->toBeNull()
+        ->and(DirectoryEntry::where('listable_id', $channel->id)->value('avatar_path'))->toBe($path);
 });

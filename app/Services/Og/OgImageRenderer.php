@@ -41,20 +41,20 @@ class OgImageRenderer
 
     private const ACCENT = '#8eeed2';
 
-    private const ACCENT_INK = '#0f7a68';
-
     private const TEXT = '#1c1c1a';
 
     private const MUTED = '#7c7c76';
 
     /** Same order as TONES in resources/js/components/figures/dither-field.tsx. */
-    private const TONES = ['mint', 'sky', 'violet'];
+    private const TONES = ['mint', 'sky', 'violet', 'amber', 'rose'];
 
     /** [paper, highlight, ink] per tone, matching the profile cover. */
     private const PALETTES = [
         'mint' => ['#e9f8f2', '#8fe3c9', '#1f9a7a'],
         'sky' => ['#ebf2fd', '#a9cbf8', '#2f6fd6'],
         'violet' => ['#f1ecfd', '#c6b5f8', '#6a4bdc'],
+        'amber' => ['#fdf4e3', '#f3cf86', '#b26b0e'],
+        'rose' => ['#fdeef2', '#f6b3c6', '#c2335f'],
     ];
 
     private const BAYER = [
@@ -102,8 +102,7 @@ class OgImageRenderer
     }
 
     /**
-     * Every channel has its own card; a claimed one is marked verified and,
-     * when the owner is shown, credits them next to the handle.
+     * Every channel has its own card; a claimed one gets the verified badge.
      */
     public function renderForChannel(Channel $channel): ?string
     {
@@ -112,7 +111,7 @@ class OgImageRenderer
         return $this->render(
             self::path('channel', $channel->id),
             $channel->displayTitle(),
-            Str::limit('@'.$channel->username.($owner !== null ? ' · by '.$owner->display_name : ''), 38),
+            Str::limit('@'.$channel->username, 38),
             $this->presenter->hook($channel) ?? $channel->description,
             $this->facts($channel, $channel->subscribers),
             $channel->avatar_path ?? $owner?->avatar_path,
@@ -207,17 +206,26 @@ class OgImageRenderer
             $image->insert($manager->decodeBinary($this->portrait($avatar, $palette, $tone)), 72, 65);
 
             $x = 584;
+            $ink = $palette[2];
 
-            // Brand row: mint dot + wordmark, "Verified" pill on the right.
-            $image->drawCircle(fn ($c) => $c->at($x + 8, 106)->radius(8)->background(self::ACCENT));
-            $this->text($image, (string) config('app.name', 'Buildr'), $x + 26, 116, 26, bold: true);
+            // Brand row: the logo tile + wordmark.
+            $image->insert($manager->decodeBinary($this->logoMark(40)), $x, 86);
+            $this->text($image, (string) config('app.name', 'Buildr'), $x + 52, 116, 26, bold: true);
 
-            if ($verified) {
-                $image->insert($manager->decodeBinary($this->pill(132, 40, '#eefaf6', '#cdeee3')), 1128 - 132, 84);
-                $this->text($image, 'Verified', 1128 - 66, 112, 20, color: self::ACCENT_INK, align: 'center');
+            // Name, shrunk to fit the column, then the verified badge in their tone.
+            $name = Str::limit($this->clean($name), 22);
+            $badge = $verified ? 38 + 12 : 0;
+            $size = 54;
+
+            while ($size > 38 && $this->textWidth($name, $size, bold: true) + $badge > 1128 - $x) {
+                $size -= 2;
             }
 
-            $this->text($image, Str::limit($this->clean($name), 22), $x, 206, 54, bold: true);
+            $this->text($image, $name, $x, 206, $size, bold: true);
+
+            if ($verified) {
+                $image->insert($manager->decodeBinary($this->badge(38, $ink)), $x + $this->textWidth($name, $size, bold: true) + 12, 206 - (int) round($size * 0.72) - 1);
+            }
 
             if ($handle !== null) {
                 $this->text($image, $handle, $x, 246, 26, color: self::MUTED);
@@ -233,7 +241,7 @@ class OgImageRenderer
                 $this->text($image, $label, $fx, 506, 20, color: self::MUTED);
             }
 
-            $this->text($image, $this->displayUrl($url), $x, 562, 24, bold: true, color: self::ACCENT_INK);
+            $this->text($image, $this->displayUrl($url), $x, 562, 24, bold: true, color: $ink);
 
             Storage::disk('public')->put($path, (string) $image->encode(new PngEncoder));
 
@@ -371,25 +379,100 @@ class OgImageRenderer
         return array_values(array_map('array_values', $values));
     }
 
-    private function pill(int $w, int $h, string $fill, string $border): string
+    /**
+     * The site's logo tile (resources/js/components/brand/logo.tsx), drawn at
+     * 4x and downsampled: white rounded tile, ink "b", one mint dot.
+     */
+    private function logoMark(int $size): string
     {
-        $scale = 2;
-        $img = $this->newImage($w * $scale, $h * $scale);
+        $k = $size * 4 / 32;
+        $tile = (int) round(32 * $k);
+        $img = $this->transparent($tile);
 
+        $this->roundedRect($img, 0, 0, $tile, $tile, (int) round(9.5 * $k), self::LINE);
+        $this->roundedRect($img, (int) round($k), (int) round($k), (int) round(30 * $k), (int) round(30 * $k), (int) round(8.5 * $k), self::CARD);
+
+        // Stem of the "b" with round caps.
+        $half = 1.3 * $k;
+        $this->disc($img, 11.2 * $k, 7.8 * $k, $half, self::TEXT);
+        $this->disc($img, 11.2 * $k, 24.2 * $k, $half, self::TEXT);
+        imagefilledrectangle($img, (int) round(11.2 * $k - $half), (int) round(7.8 * $k), (int) round(11.2 * $k + $half), (int) round(24.2 * $k), $this->color($img, self::TEXT));
+
+        // Bowl: an ink disc with a white disc punched in.
+        $this->disc($img, 16.9 * $k, 18.6 * $k, 6.7 * $k, self::TEXT);
+        $this->disc($img, 16.9 * $k, 18.6 * $k, 4.1 * $k, self::CARD);
+
+        $this->disc($img, 23.6 * $k, 8.6 * $k, 2.3 * $k, self::ACCENT);
+
+        return $this->png($this->downsample($img, $size));
+    }
+
+    /**
+     * A scalloped "verified" rosette with a white check, in the profile's ink.
+     */
+    private function badge(int $size, string $ink): string
+    {
+        $big = $size * 4;
+        $img = $this->transparent($big);
+        $c = $big / 2;
+
+        for ($i = 0; $i < 12; $i++) {
+            $a = $i * M_PI / 6;
+            $this->disc($img, $c + cos($a) * $big * 0.3, $c + sin($a) * $big * 0.3, $big * 0.18, $ink);
+        }
+
+        $this->disc($img, $c, $c, $big * 0.36, $ink);
+
+        $white = $this->color($img, '#ffffff');
+        imagesetthickness($img, (int) round($big * 0.085));
+        imageline($img, (int) round($big * 0.32), (int) round($big * 0.52), (int) round($big * 0.45), (int) round($big * 0.65), $white);
+        imageline($img, (int) round($big * 0.45), (int) round($big * 0.65), (int) round($big * 0.69), (int) round($big * 0.38), $white);
+
+        return $this->png($this->downsample($img, $size));
+    }
+
+    private function transparent(int $size): GdImage
+    {
+        $img = $this->newImage($size, $size);
         imagealphablending($img, false);
         imagesavealpha($img, true);
         imagefill($img, 0, 0, (int) imagecolorallocatealpha($img, 255, 255, 255, 127));
         imagealphablending($img, true);
-        $this->roundedRect($img, 0, 0, $w * $scale, $h * $scale, ($h * $scale) / 2, $border);
-        $this->roundedRect($img, 2 * $scale, 2 * $scale, ($w - 4) * $scale, ($h - 4) * $scale, (($h - 4) * $scale) / 2, $fill);
 
-        $out = $this->newImage($w, $h);
+        return $img;
+    }
 
+    private function downsample(GdImage $img, int $size): GdImage
+    {
+        $out = $this->transparent($size);
         imagealphablending($out, false);
-        imagesavealpha($out, true);
-        imagecopyresampled($out, $img, 0, 0, 0, 0, $w, $h, $w * $scale, $h * $scale);
+        imagecopyresampled($out, $img, 0, 0, 0, 0, $size, $size, imagesx($img), imagesy($img));
 
-        return $this->png($out);
+        return $out;
+    }
+
+    private function disc(GdImage $img, float $cx, float $cy, float $r, string $hex): void
+    {
+        imagefilledellipse($img, (int) round($cx), (int) round($cy), (int) round($r * 2), (int) round($r * 2), $this->color($img, $hex));
+    }
+
+    private function color(GdImage $img, string $hex): int
+    {
+        [$r, $g, $b] = $this->rgb($hex);
+
+        return (int) imagecolorallocate($img, $r, $g, $b);
+    }
+
+    private function textWidth(string $text, int $size, bool $bold = false): int
+    {
+        $box = imagettfbbox($size * .76, 0, $this->fontFile($text, $bold), $text);
+
+        return $box === false ? 0 : (int) abs($box[2] - $box[0]);
+    }
+
+    private function fontFile(string $text, bool $bold): string
+    {
+        return resource_path('fonts/'.(LanguageDetector::hasEthiopic($text) ? 'NotoSansEthiopic' : 'NotoSans').($bold ? '-Bold' : '-Regular').'.ttf');
     }
 
     private function canvas(int $w, int $h, string $hex): GdImage
@@ -488,8 +571,7 @@ class OgImageRenderer
         float $lineHeight = 1.2,
         string $valign = 'bottom',
     ): void {
-        $ethiopic = LanguageDetector::hasEthiopic($text);
-        $file = resource_path('fonts/'.($ethiopic ? 'NotoSansEthiopic' : 'NotoSans').($bold ? '-Bold' : '-Regular').'.ttf');
+        $file = $this->fontFile($text, $bold);
 
         $image->text($text, $x, $y, function (FontFactory $font) use ($file, $size, $color, $align, $valign, $wrap, $lineHeight) {
             $font->filename($file);

@@ -88,3 +88,11 @@ it('creates admins only from the console', function () {
 
     $this->get('/register')->assertNotFound();
 });
+
+it('generates a password when there is no terminal to type one', function () {
+    $this->artisan('buildr:make-admin', ['email' => 'ops@example.com', '--no-interaction' => true])
+        ->expectsOutputToContain('Password (shown once):')
+        ->assertSuccessful();
+
+    expect(User::where('email', 'ops@example.com')->first()?->isAdmin())->toBeTrue();
+});

@@ -89,7 +89,7 @@ export default function Audit({
                         </td>
                         <td className="font-mono text-xs">{l.subject}</td>
                         <td className="max-w-md">
-                            <pre className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                            <pre className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
                                 {l.meta ? JSON.stringify(l.meta) : ''}
                             </pre>
                         </td>

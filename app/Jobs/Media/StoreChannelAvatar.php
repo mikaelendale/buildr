@@ -3,7 +3,9 @@
 namespace App\Jobs\Media;
 
 use App\Models\Channel;
+use App\Services\Directory\DirectoryIndexer;
 use App\Services\Media\AvatarStorer;
+use App\Services\Og\OgImageRenderer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -18,7 +20,7 @@ class StoreChannelAvatar implements ShouldQueue
         $this->onQueue('media');
     }
 
-    public function handle(AvatarStorer $storer): void
+    public function handle(AvatarStorer $storer, DirectoryIndexer $indexer, OgImageRenderer $og): void
     {
         $channel = Channel::find($this->channelId);
 
@@ -30,6 +32,12 @@ class StoreChannelAvatar implements ShouldQueue
 
         if ($path !== null && $path !== $channel->avatar_path) {
             $channel->forceFill(['avatar_path' => $path])->save();
+
+            // A listing or share card built before the photo arrived still shows the old one (or none).
+            if ($channel->hasPublicPage()) {
+                $indexer->refreshChannel($channel);
+                $og->refreshForChannel($channel);
+            }
         }
     }
 }

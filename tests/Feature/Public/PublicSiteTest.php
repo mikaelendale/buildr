@@ -198,6 +198,20 @@ it('serves the share card on demand, as a download when asked', function () {
         ->toContain('buildr-selam.png');
 });
 
+it('re-renders every public share card on demand', function () {
+    $creator = publishedCreator('selam', 'Selam', 'selambuilds');
+    $channel = publishedChannel('openchannel', 'Open Channel');
+    $hidden = Channel::factory()->create(['username' => 'hiddenchannel']);
+
+    $this->artisan('buildr:reindex', ['--cards' => true])
+        ->expectsOutputToContain('Rendered 3 share cards.')
+        ->assertSuccessful();
+
+    Storage::disk('public')->assertExists("og/creator/{$creator->id}.png");
+    Storage::disk('public')->assertExists("og/channel/{$channel->id}.png");
+    Storage::disk('public')->assertMissing("og/channel/{$hidden->id}.png");
+});
+
 it('only lets the owner fetch the share card of a draft profile', function () {
     $creator = publishedCreator('dawit', 'Dawit', 'dawit_ai');
     $creator->update(['status' => CreatorStatus::Draft]);

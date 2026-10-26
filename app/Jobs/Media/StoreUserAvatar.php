@@ -3,6 +3,7 @@
 namespace App\Jobs\Media;
 
 use App\Models\User;
+use App\Services\Directory\DirectoryIndexer;
 use App\Services\Media\AvatarStorer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -21,7 +22,7 @@ class StoreUserAvatar implements ShouldQueue
         $this->onQueue('media');
     }
 
-    public function handle(AvatarStorer $storer): void
+    public function handle(AvatarStorer $storer, DirectoryIndexer $indexer): void
     {
         $user = User::find($this->userId);
 
@@ -38,6 +39,9 @@ class StoreUserAvatar implements ShouldQueue
 
             if ($creator !== null && $creator->avatar_path === null) {
                 $creator->forceFill(['avatar_path' => $path])->save();
+
+                // Their channels without a photo of their own are listed with this one.
+                $indexer->refreshCreator($creator);
             }
         }
     }

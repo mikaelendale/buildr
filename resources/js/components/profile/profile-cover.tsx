@@ -40,6 +40,8 @@ const PORTRAIT: Record<
     mint: { light: ['#1f9a7a', '#8fe3c9'], dark: ['#43d3a8', '#b4f5df'] },
     sky: { light: ['#2f6fd6', '#a9cbf8'], dark: ['#5b98ef', '#c7dcfb'] },
     violet: { light: ['#6a4bdc', '#c6b5f8'], dark: ['#8f72f2', '#d7cbfb'] },
+    amber: { light: ['#b26b0e', '#f3cf86'], dark: ['#e8a94a', '#f8dfae'] },
+    rose: { light: ['#c2335f', '#f6b3c6'], dark: ['#ec7a9c', '#fad0dc'] },
 };
 
 // A soft vignette: fades toward the content (left), the page edge (right),

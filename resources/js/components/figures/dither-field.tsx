@@ -13,7 +13,7 @@ type DitheringShape = NonNullable<DitheringProps['shape']>;
  * wash underneath is what the server renders.
  */
 
-export type DitherTone = 'mint' | 'sky' | 'violet';
+export type DitherTone = 'mint' | 'sky' | 'violet' | 'amber' | 'rose';
 
 export const PALETTE: Record<
     DitherTone,
@@ -33,6 +33,16 @@ export const PALETTE: Record<
         light: ['#d6c9fb', '#9a7cf0'],
         dark: ['#33256b', '#8f72f2'],
         wash: 'var(--violet-soft)',
+    },
+    amber: {
+        light: ['#f6dca0', '#e3a032'],
+        dark: ['#5a3d10', '#e8a94a'],
+        wash: 'var(--amber-soft)',
+    },
+    rose: {
+        light: ['#f9c7d5', '#ec6a91'],
+        dark: ['#5c1f33', '#ec7a9c'],
+        wash: 'var(--rose-soft)',
     },
 };
 
@@ -177,4 +187,4 @@ export function seedFrom(value: string): number {
     return Math.abs(hash);
 }
 
-export const TONES: DitherTone[] = ['mint', 'sky', 'violet'];
+export const TONES: DitherTone[] = ['mint', 'sky', 'violet', 'amber', 'rose'];

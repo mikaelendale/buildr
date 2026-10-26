@@ -1,5 +1,5 @@
 import { Form, Head, usePage } from '@inertiajs/react';
-import { ArrowUpRight, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
 import TelegramLoginButton from '@/components/creator/telegram-login-button';
 import Glyph from '@/components/figures/glyph';
 import InputError from '@/components/input-error';
@@ -13,7 +13,7 @@ type Props = {
 
 const PROMISES = [
     'No passwords, no account access. We only get your public Telegram name, username and photo.',
-    'Allowing messages lets our bot tell you when your profile is ready. You can stop it any time.',
+    'It all happens here in your browser. Nothing to install, no bot to start.',
 ];
 
 export default function TelegramLogin({
@@ -40,11 +40,8 @@ export default function TelegramLogin({
                     <div className="group flex w-full flex-col items-center gap-3 rounded-2xl border border-dashed border-border p-5">
                         <Glyph name="send" className="size-10" />
                         <p className="text-sm text-pretty text-muted-foreground">
-                            Telegram login isn&apos;t configured yet. Set{' '}
-                            <code className="rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[11px] text-foreground/80">
-                                TELEGRAM_BOT_USERNAME
-                            </code>
-                            .
+                            Creator login opens in a moment. Meanwhile you
+                            can still search and browse every page.
                         </p>
                     </div>
                 )}
@@ -61,23 +58,6 @@ export default function TelegramLogin({
                         </li>
                     ))}
                 </ul>
-
-                <p className="text-xs text-muted-foreground">
-                    Button not showing up inside Telegram?{' '}
-                    <a
-                        href={
-                            typeof window !== 'undefined'
-                                ? window.location.href
-                                : '/login'
-                        }
-                        target="_blank"
-                        rel="noopener"
-                        className="inline-flex items-center gap-0.5 text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
-                    >
-                        Open this page in your browser
-                        <ArrowUpRight className="size-3" />
-                    </a>
-                </p>
 
                 {devLogin && (
                     <Form

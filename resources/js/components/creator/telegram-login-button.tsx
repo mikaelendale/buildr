@@ -8,8 +8,9 @@ declare global {
 }
 
 /**
- * Telegram Login Widget (plan §5.1). request-access=write lets the bot DM the
- * creator later. The widget only renders on the domain set with /setdomain.
+ * Telegram Login Widget (plan §5.1), web only: it asks for the public profile
+ * and nothing else (no permission for the bot to message). The widget only
+ * renders on the domain set with /setdomain.
  */
 export default function TelegramLoginButton({
     botUsername,
@@ -30,7 +31,6 @@ export default function TelegramLoginButton({
         script.setAttribute('data-telegram-login', botUsername);
         script.setAttribute('data-size', 'large');
         script.setAttribute('data-radius', '20');
-        script.setAttribute('data-request-access', 'write');
         script.setAttribute('data-onauth', 'onTelegramAuth(user)');
         script.onload = () => setLoaded(true);
 
