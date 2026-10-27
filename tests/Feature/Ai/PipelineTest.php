@@ -126,21 +126,52 @@ it('drops claims the checker marks unsupported or sensitive', function () {
         ->and(collect($summary->verification['dropped'])->pluck('section')->all())->toContain('eras', 'start_here');
 });
 
-it('regenerates once, then fails verification when the hook is unsupported', function () {
+it('writes up to three drafts, then publishes the last one without the hook it could not back', function () {
     $this->fakeAi(['hook' => 'unsupported']);
     $channel = channelWithPosts();
 
     ProcessChannel::dispatchSync($channel->id);
 
     $summaries = Summary::where('channel_id', $channel->id)->orderBy('version')->get();
+    $last = $summaries->last();
 
-    expect($summaries)->toHaveCount(2)
-        ->and($summaries->pluck('status')->all())->toBe([SummaryStatus::FailedVerification, SummaryStatus::FailedVerification])
-        ->and($summaries->last()->month_digests)->toBe($summaries->first()->month_digests);
+    expect($summaries)->toHaveCount(ProcessChannel::MAX_DRAFTS)
+        ->and($summaries->pluck('status')->all())->toBe([SummaryStatus::FailedVerification, SummaryStatus::FailedVerification, SummaryStatus::Verified])
+        // The unsupported hook is gone; the intro's first sentence stands in.
+        ->and($last->content['hook'])->toBe('This channel documents building Chapa Bot in public.')
+        ->and($last->verification['partial'])->toBeTrue()
+        ->and($last->verification['missing'])->toBe(['hook'])
+        ->and($last->month_digests)->toBe($summaries->first()->month_digests);
 
-    // The retry tells the writer what the fact-checker rejected.
+    // Each retry tells the writer what the fact-checker rejected.
     ProfileWriter::assertPrompted(fn ($prompt) => str_contains($prompt->prompt, 'A previous draft was rejected')
         && str_contains($prompt->prompt, '- hook: unsupported'));
+});
+
+it('keeps a complete live profile instead of a partial new one', function () {
+    $channel = channelWithPosts();
+    ProcessChannel::dispatchSync($channel->id);
+    $live = Summary::where('channel_id', $channel->id)->where('status', SummaryStatus::Verified)->sole();
+
+    $this->fakeAi(['hook' => 'unsupported']);
+    ProcessChannel::dispatchSync($channel->id, 'summary_start');
+
+    expect($live->fresh()->status)->toBe(SummaryStatus::Verified)
+        ->and(Summary::where('channel_id', $channel->id)->where('id', '>', $live->id)->pluck('status')->unique()->all())->toBe([SummaryStatus::FailedVerification]);
+});
+
+it('leaves a draft with nothing left for a person to review', function () {
+    $this->fakeAi(['hook' => 'unsupported', 'intro' => 'unsupported'], writer: function (string $prompt) {
+        $posts = $this->payload($prompt)['posts'];
+
+        return ['hook' => 'Unbacked.', 'hook_cites' => [$posts[0]['msg_id']], 'vibe_tags' => [], 'intro' => 'Unbacked too.', 'intro_cites' => [$posts[1]['msg_id']],
+            'building_now' => [], 'eras' => [], 'start_here' => [], 'in_their_words' => [], 'how_they_work' => null, 'fun_facts' => []];
+    });
+    $channel = channelWithPosts();
+
+    ProcessChannel::dispatchSync($channel->id);
+
+    expect(Summary::where('channel_id', $channel->id)->pluck('status')->unique()->all())->toBe([SummaryStatus::FailedVerification]);
 });
 
 it('drops fabricated quotes, unknown projects and wrong numbers deterministically', function () {

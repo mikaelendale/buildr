@@ -21,6 +21,7 @@ use App\Services\Creators\EditorData;
 use App\Services\Profiles\ProfilePageBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -61,6 +62,7 @@ class ReviewController extends Controller
                 'slug' => $c->slug,
                 'submitted_at' => $c->submitted_at?->toIso8601String(),
                 'channels' => $c->channels()->pluck('username'),
+                'profile' => $this->profileState($c),
                 'flags' => $flags->forCreator($c),
             ]),
             'channels' => $channels->map(fn (Channel $c) => [
@@ -84,6 +86,10 @@ class ReviewController extends Controller
                 'version' => $s->version,
                 'created_at' => $s->created_at?->toIso8601String(),
                 'creator_id' => $s->channel?->creator_id,
+                // What the fact-checker took out, and whether a good profile is still live.
+                'missing' => array_values(array_filter(['hook', 'intro'], fn (string $key) => blank($s->content[$key] ?? null))),
+                'dropped' => count((array) ($s->verification['dropped'] ?? [])),
+                'has_live' => Summary::where('channel_id', $s->channel_id)->whereIn('status', [SummaryStatus::Verified, SummaryStatus::Approved])->exists(),
             ]),
         ]);
     }
@@ -202,6 +208,93 @@ class ReviewController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Regenerating. It will reappear in the queue if verification fails.']);
 
         return back();
+    }
+
+    /**
+     * The same action on many queue items at once. Each one goes through
+     * the single-item action (messages, audit log); items that changed
+     * state since the page loaded are skipped.
+     */
+    public function bulk(Request $request, AdminActions $actions): RedirectResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['approve_creators', 'publish_channels', 'regenerate', 'approve_summaries'])],
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $admin = $request->user();
+        $ids = array_values(array_unique($data['ids']));
+        $done = 0;
+
+        foreach ($ids as $id) {
+            switch ($data['action']) {
+                case 'approve_creators':
+                    if ($creator = Creator::where('status', CreatorStatus::PendingReview)->find($id)) {
+                        $actions->approveCreator($creator, $admin);
+                        $done++;
+                    }
+                    break;
+                case 'publish_channels':
+                    if ($channel = Channel::where('review_status', ChannelReviewStatus::Pending)->find($id)) {
+                        $actions->publishChannel($channel, $admin);
+                        $done++;
+                    }
+                    break;
+                case 'regenerate':
+                    if ($channel = Channel::find($id)) {
+                        ProcessChannel::dispatch($channel->id, 'summary_start', null, 1, 'admin');
+                        AuditLog::record('summary.regenerate_requested', $channel, ['bulk' => true], $admin);
+                        $done++;
+                    }
+                    break;
+                case 'approve_summaries':
+                    if ($summary = Summary::where('status', SummaryStatus::FailedVerification)->find($id)) {
+                        $actions->approveSummary($summary, $admin);
+                        $done++;
+                    }
+                    break;
+            }
+        }
+
+        $what = match ($data['action']) {
+            'approve_creators' => 'Approved and published',
+            'publish_channels' => 'Published',
+            'regenerate' => 'Rewriting',
+            'approve_summaries' => 'Approved',
+        };
+        $skipped = count($ids) - $done;
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => "{$what} {$done}.".($skipped > 0 ? " Skipped {$skipped} that had already changed." : '')]);
+
+        return redirect('/admin/review');
+    }
+
+    /**
+     * Whether a submission's profile is ready: every claimed channel has a
+     * good summary (ready), one is still being written (writing), or the
+     * latest draft failed the fact-check (failed).
+     */
+    private function profileState(Creator $creator): string
+    {
+        $states = $creator->channels()->where('claim_status', ChannelClaimStatus::Claimed)->get()->map(function (Channel $channel) {
+            if ($channel->summaries()->whereIn('status', [SummaryStatus::Verified, SummaryStatus::Approved])->exists()) {
+                return 'ready';
+            }
+
+            return match ($channel->summaries()->latest('id')->first()?->status) {
+                null => 'none',
+                SummaryStatus::FailedVerification => 'failed',
+                default => 'writing',
+            };
+        });
+
+        return match (true) {
+            $states->isEmpty() => 'none',
+            $states->contains('failed') => 'failed',
+            $states->contains('writing') || $states->contains('none') => 'writing',
+            default => 'ready',
+        };
     }
 
     private function next(string $message): RedirectResponse

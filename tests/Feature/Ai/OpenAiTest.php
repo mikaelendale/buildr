@@ -57,7 +57,7 @@ it('sets reasoning per step: none for labelling, a little for writing and checki
 
     expect($extractor['reasoning'])->toBe(['effort' => 'minimal'])
         ->and($extractor['max_output_tokens'])->toBeGreaterThan(0)
-        ->and($writer['reasoning'])->toBe(['effort' => 'low'])
+        ->and($writer['reasoning'])->toBe(['effort' => 'medium'])
         ->and((new PostExtractor('gpt-5.6-luna'))->providerOptions('openai')['reasoning'])->toBe(['effort' => 'none'])
         // Models that don't reason take no setting at all.
         ->and((new PostExtractor('gpt-4.1-mini'))->providerOptions('openai'))->not->toHaveKey('reasoning');

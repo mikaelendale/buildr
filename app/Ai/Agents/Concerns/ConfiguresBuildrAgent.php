@@ -63,7 +63,7 @@ trait ConfiguresBuildrAgent
             return array_filter([
                 'max_output_tokens' => $this->outputTokenBudget(),
                 'reasoning' => self::openAiReasoning($this->model, match (class_basename($this)) {
-                    'ProfileWriter', 'ProjectResolver' => (string) config('buildr.ai.openai_effort', 'low'),
+                    'ProfileWriter', 'ProjectResolver' => (string) config('buildr.ai.openai_effort', 'medium'),
                     'ClaimChecker' => 'low',
                     default => null,
                 }),
