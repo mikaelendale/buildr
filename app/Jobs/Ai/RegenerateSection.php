@@ -41,7 +41,13 @@ class RegenerateSection implements ShouldQueue
     public function handle(SummaryGenerator $generator, SummaryVerifier $verifier, TelegramNotifier $notifier): void
     {
         $channel = Channel::find($this->channelId);
-        $base = Summary::find($this->baseSummaryId);
+
+        // Build on what is live when this runs, not when it was asked for: a
+        // second section requested before the first finished must not undo it.
+        $base = Summary::where('channel_id', $this->channelId)
+            ->whereIn('status', [SummaryStatus::Verified, SummaryStatus::Approved])
+            ->latest('id')
+            ->first() ?? Summary::find($this->baseSummaryId);
 
         if ($channel === null || $base === null) {
             return;

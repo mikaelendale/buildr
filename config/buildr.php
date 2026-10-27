@@ -58,6 +58,9 @@ return [
         'extraction_model' => env('BUILDR_AI_EXTRACTION_MODEL', 'gpt-5.6-luna'),
         'synthesis_model' => env('BUILDR_AI_SYNTHESIS_MODEL', 'gpt-5.6-luna'),
         'verify_model' => env('BUILDR_AI_VERIFY_MODEL', 'gpt-5.6-luna'),
+        // OpenAI reasoning for the steps that weigh evidence (writer, project
+        // resolver, fact-checker): low, medium or high. Labelling uses none.
+        'openai_effort' => env('BUILDR_AI_OPENAI_EFFORT', 'low'),
         'prompt_version' => (int) env('BUILDR_AI_PROMPT_VERSION', 1),
         'daily_budget_usd' => (float) env('BUILDR_AI_DAILY_BUDGET_USD', 10),
         'extraction_batches_per_job' => 5,
