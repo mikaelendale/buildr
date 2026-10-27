@@ -9,6 +9,7 @@ import {
     Flag,
     FolderKanban,
     LayoutGrid,
+    Megaphone,
     Radio,
     ScrollText,
     Settings,
@@ -49,6 +50,7 @@ const adminNav: NavItem[] = [
     { title: 'Creators', href: '/admin/creators', icon: Users },
     { title: 'Claims & disputes', href: '/admin/claims', icon: BadgeCheck },
     { title: 'Reports', href: '/admin/reports', icon: Flag },
+    { title: 'Announcements', href: '/admin/announcements', icon: Megaphone },
     { title: 'Jobs', href: '/admin/jobs', icon: Activity },
     { title: 'AI costs', href: '/admin/ai-costs', icon: Coins },
     { title: 'Featured', href: '/admin/featured', icon: Star },
@@ -65,17 +67,15 @@ export function AppSidebar() {
     // "View my page" / "View site" live in the top bar of every page.
     const footer: NavItem[] = isAdmin
         ? []
-        : [
-              ...(telegramBot
-                  ? [
-                        {
-                            title: 'Open the bot',
-                            href: `https://t.me/${telegramBot}`,
-                            icon: Bot,
-                        },
-                    ]
-                  : []),
-          ];
+        : telegramBot
+          ? [
+                {
+                    title: 'Open the bot',
+                    href: `https://t.me/${telegramBot}`,
+                    icon: Bot,
+                },
+            ]
+          : [];
 
     return (
         <Sidebar collapsible="icon" variant="inset">

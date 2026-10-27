@@ -2,18 +2,16 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\UserRole;
-use App\Models\User;
-use App\Services\Notifications\TelegramNotifier;
+use App\Services\Notifications\Announcer;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('buildr:announce {message : Telegram HTML (<b>, <i>, <a href>)} {--send : Actually send; without it, only count who would get it}')]
-#[Description('Message every creator connected to the bot about something new on Buildr (skips anyone who muted updates)')]
+#[Signature('buildr:announce {message : Telegram HTML (<b>, <i>, <a href>)} {--button= : Button label} {--url= : Button link} {--send : Actually send; without it, only count who would get it}')]
+#[Description('Message every creator connected to the bot about something new on Buildr (same as /admin/announcements; skips anyone who muted updates)')]
 class Announce extends Command
 {
-    public function handle(TelegramNotifier $notifier): int
+    public function handle(Announcer $announcer): int
     {
         $message = trim((string) $this->argument('message'));
 
@@ -23,29 +21,16 @@ class Announce extends Command
             return self::FAILURE;
         }
 
-        $audience = User::query()
-            ->where('role', UserRole::Creator)
-            ->whereNotNull('telegram_id')
-            ->where('bot_can_message', true)
-            ->where('notify_product_updates', true)
-            ->whereNull('banned_at');
-
         if (! $this->option('send')) {
-            $this->info("Would send to {$audience->count()} creators. Run again with --send to send.");
-            $this->line($message);
+            $this->info("Would send to {$announcer->audience()->count()} creators. Run again with --send to send.");
+            $this->line($announcer->compose($message));
 
             return self::SUCCESS;
         }
 
-        $sent = 0;
+        $announcement = $announcer->send($message, $this->option('button'), $this->option('url'));
 
-        $audience->each(function (User $user) use ($notifier, $message, &$sent) {
-            if ($notifier->announce($user, "📣 {$message}\n\n<i>Mute these in Settings on Buildr.</i>")) {
-                $sent++;
-            }
-        });
-
-        $this->info("Queued {$sent} messages.");
+        $this->info("Queued {$announcement->recipients} messages.");
 
         return self::SUCCESS;
     }

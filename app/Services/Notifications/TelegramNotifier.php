@@ -29,14 +29,6 @@ class TelegramNotifier
         return true;
     }
 
-    /**
-     * A product announcement: only to people who kept updates on.
-     */
-    public function announce(User $user, string $html): bool
-    {
-        return $user->notify_product_updates && $this->toUser($user, $html);
-    }
-
     public function passwordReset(User $user, string $token): bool
     {
         if ($user->isAdmin() || $user->email === null) {

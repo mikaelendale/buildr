@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Announcement;
 use App\Models\Channel;
 use App\Models\Claim;
 use App\Models\Creator;
@@ -94,6 +95,7 @@ class AppServiceProvider extends ServiceProvider
             'summary' => Summary::class,
             'claim' => Claim::class,
             'report' => Report::class,
+            'announcement' => Announcement::class,
         ]);
     }
 

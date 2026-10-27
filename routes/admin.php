@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AnnouncementController;
 use App\Http\Controllers\Admin\ChannelController;
 use App\Http\Controllers\Admin\ClaimController;
 use App\Http\Controllers\Admin\CreatorController;
@@ -102,5 +103,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'admin
         Route::delete('blocklist/{entry}', [CurationController::class, 'unblock'])->name('blocklist.destroy');
 
         Route::get('audit', [CurationController::class, 'audit'])->name('audit');
+
+        Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements');
+        Route::post('announcements', [AnnouncementController::class, 'store'])->middleware('throttle:5,1')->name('announcements.store');
+        Route::post('announcements/test', [AnnouncementController::class, 'test'])->middleware('throttle:10,1')->name('announcements.test');
     });
 });
