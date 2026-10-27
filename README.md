@@ -4,6 +4,20 @@ A directory of Telegram creators: search any channel, see who runs it, what they
 
 Live at [buildr.mikaelen.site](https://buildr.mikaelen.site). The original spec is in [`telegram-creator-directory-build-plan.md`](telegram-creator-directory-build-plan.md); §18 lists where the build differs from it.
 
+![A creator's profile on Buildr: their halftone portrait, verified badge, tags and channel](docs/images/profile.png)
+
+## What it does
+
+- **Search and discover** Telegram channels and the people behind them, by name, topic, size or language.
+- **AI-written profiles** from a channel's public posts: what they build, their journey, projects and the posts worth starting with, every line linked to its source.
+- **Claim your page** with a short code in the channel bio, then edit the profile, list projects and add socials.
+- **Share cards** for link previews and posting, in light, dark or solid color, six colors to pick from:
+
+![The same share card in a light, dark and solid-color look](docs/images/share-cards.png)
+
+- **A Telegram bot** for password resets, updates about your page and announcements.
+- **An admin panel** with 2FA: review queue, claims and disputes, reports, jobs, AI costs, featured profiles, tags, announcements and an audit log.
+
 ## Stack
 
 Laravel 13 · Inertia v3 + React 19 + TypeScript (SSR) · Tailwind 4 + shadcn/ui · Fortify (admin 2FA) · Laravel AI SDK (Anthropic, Gemini or Groq) · Pest · PHPStan level 7.
@@ -111,6 +125,10 @@ Buildr only reads what Telegram publishes on its public `t.me/s/<channel>` web p
 | Public pages                      | `app/Http/Controllers/Public`, `resources/js/pages/public`                                              |
 | Creator onboarding + dashboard    | `app/Http/Controllers/Creator`, `resources/js/pages/onboarding`, `resources/js/pages/dashboard`         |
 | Admin panel                       | `app/Http/Controllers/Admin`, `resources/js/pages/admin`                                                |
+
+## Contributing
+
+Pull requests are welcome: fork the repo, branch from `main`, and open a PR. `main` is protected, so every change (the maintainer's too) goes in through a PR with passing checks. See [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ## License
 

@@ -16,11 +16,17 @@ use Inertia\Response;
  */
 class DiscoverController extends Controller
 {
+    /**
+     * Subscriber ranges [min, max]; null means no upper bound (subscribers
+     * is an int column: Postgres rejects PHP_INT_MAX as a bound).
+     *
+     * @var array<string, array{0: int, 1: int|null}>
+     */
     public const SIZES = [
         'lt1k' => [0, 999],
         '1k-10k' => [1_000, 9_999],
         '10k-50k' => [10_000, 49_999],
-        '50k+' => [50_000, PHP_INT_MAX],
+        '50k+' => [50_000, null],
     ];
 
     public const SORTS = ['trending', 'newest', 'subscribers', 'active'];
@@ -98,7 +104,7 @@ class DiscoverController extends Controller
 
         if ($filters['size'] !== null) {
             [$min, $max] = self::SIZES[$filters['size']];
-            $query->whereBetween('subscribers', [$min, $max]);
+            $query->where('subscribers', '>=', $min)->when($max !== null, fn (Builder $q) => $q->where('subscribers', '<=', $max));
         }
 
         return match ($filters['sort']) {
