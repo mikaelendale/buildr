@@ -34,7 +34,7 @@ function fakeTelegram(array $overrides = []): void
     Http::fake($overrides + [
         't.me/s/testbuilder?before=100' => Http::response('<html><body></body></html>'),
         't.me/s/testbuilder*' => Http::response(fixtureContents('telegram/feed-synthetic.html')),
-        't.me/testbuilder' => Http::response(fixtureContents('telegram/channel-info-durov.html')),
+        't.me/testbuilder' => Http::response(fixtureContents('telegram/channel-info.html')),
         '*.telesco.pe/*' => Http::response(tinyJpeg(), 200, ['Content-Type' => 'image/jpeg']),
     ]);
 }
@@ -55,7 +55,7 @@ it('fetches channel info, backfills posts and hands off to the AI pipeline', fun
 
     expect($channel->page_type)->toBe(TelegramPageType::Channel)
         ->and($channel->availability)->toBe(ChannelAvailability::Ok)
-        ->and($channel->subscribers)->toBe(10_249_235)
+        ->and($channel->subscribers)->toBe(1_234_567)
         ->and($channel->backfill_complete)->toBeTrue()
         ->and($channel->scrape_status)->toBe(ScrapeStatus::Idle)
         ->and($channel->newest_msg_id)->toBe(106)

@@ -2,6 +2,7 @@
 
 namespace App\Services\Telegram;
 
+use App\Jobs\SendTelegramMessage;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -52,17 +53,16 @@ class TelegramLinker
             return LinkResult::Expired;
         }
 
-        $holder = User::where('telegram_id', $telegramId)->whereKeyNot($user->id)->first();
-
-        // A Telegram-only or admin account would be locked out without it; keep it there.
-        if ($holder !== null && ($holder->isAdmin() || $holder->password === null)) {
+        // Already connected to another account: it stays there. Moving it on
+        // one tap would let someone take over a victim's reset channel by
+        // sending them a link; the owner disconnects it there first.
+        if (User::where('telegram_id', $telegramId)->whereKeyNot($user->id)->exists()) {
             return LinkResult::Taken;
         }
 
-        DB::transaction(function () use ($user, $holder, $telegramId, $from) {
-            // Same person, new account: the link moves over.
-            $holder?->forceFill(['telegram_id' => null, 'bot_can_message' => false, 'telegram_linked_at' => null])->save();
+        $previous = $user->telegram_id;
 
+        DB::transaction(function () use ($user, $telegramId, $from) {
             $user->forceFill([
                 'telegram_id' => $telegramId,
                 'telegram_username' => $from['username'] ?? null,
@@ -72,6 +72,11 @@ class TelegramLinker
                 'telegram_link_expires_at' => null,
             ])->save();
         });
+
+        // The chat that used to get this account's resets hears about it.
+        if ($previous !== null && $previous !== $telegramId) {
+            SendTelegramMessage::dispatch($previous, '⚠️ Your Buildr account was just connected to a different Telegram account, so password resets and updates go there now. If that wasn\'t you, message us right away.');
+        }
 
         return LinkResult::Linked;
     }

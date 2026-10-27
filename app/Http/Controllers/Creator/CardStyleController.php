@@ -33,7 +33,7 @@ class CardStyleController extends Controller
             ? ($creator?->id === $id ? $creator : null)
             : Channel::find($id);
 
-        abort_unless($model !== null && ($model instanceof Creator || ($model->isClaimed() && $model->creator_id === $creator?->id)), 403);
+        abort_unless($creator !== null && $model !== null && ($model instanceof Creator || ($model->isClaimed() && $model->creator_id === $creator->id)), 403);
 
         $model->forceFill(['card_theme' => $data['theme'], 'card_color' => $data['color']])->save();
 

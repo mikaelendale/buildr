@@ -72,7 +72,9 @@ class SummaryController extends Controller
 
     private function authorizeChannel(Request $request, Channel $channel): void
     {
-        abort_unless($channel->isClaimed() && $channel->creator_id === $request->user()->creator?->id, 403);
+        $creator = $request->user()->creator;
+
+        abort_unless($creator !== null && $channel->isClaimed() && $channel->creator_id === $creator->id, 403);
     }
 
     private function done(string $message): RedirectResponse

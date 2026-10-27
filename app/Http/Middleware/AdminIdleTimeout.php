@@ -22,7 +22,12 @@ class AdminIdleTimeout
         $last = (int) $request->session()->get(self::KEY, 0);
         $limit = (int) config('buildr.admin.idle_timeout_minutes') * 60;
 
-        if ($last > 0 && time() - $last > $limit) {
+        // A session revived by a "remember me" cookie has no activity yet:
+        // admins sign in again (password + 2FA) instead.
+        $expired = ($last > 0 && time() - $last > $limit)
+            || ($last === 0 && Auth::guard('web')->viaRemember());
+
+        if ($expired) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();

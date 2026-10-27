@@ -29,7 +29,8 @@ class SlugService
             return 'That name is reserved.';
         }
 
-        $taken = Creator::where('slug', $slug)
+        // A slug waiting for review is spoken for too.
+        $taken = Creator::where(fn ($q) => $q->where('slug', $slug)->orWhere('pending_changes->slug', $slug))
             ->when($ignore !== null, fn ($q) => $q->where('id', '!=', $ignore?->id))
             ->exists()
             || Channel::where('slug', $slug)

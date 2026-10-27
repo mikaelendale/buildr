@@ -5,14 +5,17 @@ namespace App\Services\Admin;
 use App\Enums\ChannelClaimStatus;
 use App\Enums\ChannelReviewStatus;
 use App\Enums\ChannelVisibility;
+use App\Enums\ClaimStatus;
 use App\Enums\CreatorStatus;
 use App\Enums\SummaryStatus;
 use App\Models\AuditLog;
 use App\Models\Channel;
+use App\Models\Claim;
 use App\Models\Creator;
 use App\Models\FeaturedItem;
 use App\Models\Summary;
 use App\Models\User;
+use App\Services\Claims\SlugService;
 use App\Services\Directory\DirectoryIndexer;
 use App\Services\Notifications\TelegramNotifier;
 use App\Services\Og\OgImageRenderer;
@@ -86,6 +89,13 @@ class AdminActions
     public function approveFieldChanges(Creator $creator, User $admin): void
     {
         $changes = $creator->pending_changes ?? [];
+        $lostSlug = null;
+
+        // Taken since it was asked for (by a channel's short link, say): keep the old one.
+        if (isset($changes['slug']) && $changes['slug'] !== $creator->slug && app(SlugService::class)->problem((string) $changes['slug'], ignore: $creator) !== null) {
+            $lostSlug = $changes['slug'];
+            unset($changes['slug']);
+        }
 
         if (isset($changes['slug']) && $changes['slug'] !== $creator->slug) {
             $changes['slug_changed_at'] = now();
@@ -96,7 +106,8 @@ class AdminActions
         $this->og->renderForCreator($creator);
         AuditLog::record('creator.field_changes_approved', $creator, ['fields' => array_keys($creator->getOriginal('pending_changes') ?? [])], $admin);
 
-        $this->notifier->toUser($creator->user, '✅ Your profile changes are live: '.$creator->url());
+        $this->notifier->toUser($creator->user, '✅ Your profile changes are live: '.$creator->url()
+            .($lostSlug !== null ? "\n\nThe short link /{$lostSlug} was taken in the meantime, so we kept your current one. Pick another in your profile." : ''));
     }
 
     public function rejectFieldChanges(Creator $creator, User $admin, ?string $reason): void
@@ -180,8 +191,14 @@ class AdminActions
     {
         $user->forceFill(['banned_at' => now(), 'ban_reason' => $reason])->save();
 
+        // Off the directory (their channels' pages close with them), no
+        // codes left to complete, no cards left to serve.
+        Claim::where('user_id', $user->id)->where('status', ClaimStatus::Pending)->update(['status' => ClaimStatus::Failed]);
+
         if ($user->creator !== null) {
-            $this->indexer->removeEntry($user->creator);
+            $this->indexer->refreshCreator($user->creator);
+            OgImageRenderer::forget('creator', $user->creator->id);
+            $user->creator->channels->each(fn (Channel $channel) => OgImageRenderer::forget('channel', $channel->id));
         }
 
         AuditLog::record('user.banned', $user, ['reason' => $reason], $admin);

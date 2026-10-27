@@ -22,6 +22,9 @@ class AvatarStorer
      */
     private const ALLOWED_HOSTS = ['telesco.pe', 'telegram.org', 't.me', 'telegram-cdn.org'];
 
+    /** Channel photos are a few hundred KB at most. */
+    private const MAX_BYTES = 8 * 1024 * 1024;
+
     /**
      * @return string|null storage path of the 400px version
      */
@@ -32,12 +35,13 @@ class AvatarStorer
         }
 
         try {
-            $response = Http::timeout(20)->withUserAgent((string) config('buildr.scrape.user_agent'))->get($url);
+            // No redirects (they could leave Telegram's hosts) and no huge files.
+            $response = Http::timeout(20)->withoutRedirecting()->withUserAgent((string) config('buildr.scrape.user_agent'))->get($url);
         } catch (Throwable) {
             return null;
         }
 
-        if (! $response->successful() || $response->body() === '') {
+        if (! $response->successful() || $response->body() === '' || strlen($response->body()) > self::MAX_BYTES) {
             return null;
         }
 

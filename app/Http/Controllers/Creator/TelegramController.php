@@ -63,7 +63,8 @@ class TelegramController extends Controller
     {
         abort_unless(filled(config('buildr.telegram.bot_username')), 503, 'The Telegram bot is not set up.');
 
-        return redirect()->away($linker->startUrl($request->user()));
+        // Inertia-aware: after the password prompt this arrives as an XHR.
+        return Inertia::location($linker->startUrl($request->user()));
     }
 
     public function status(Request $request): JsonResponse

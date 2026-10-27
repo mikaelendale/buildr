@@ -108,6 +108,7 @@ class ClaimService
             return $existing;
         }
 
+        $this->guardPending($user);
         $this->ensureIsChannel($username);
 
         return Claim::create([
@@ -115,6 +116,42 @@ class ClaimService
             'channel_username' => $username,
             'channel_id' => $channel?->id,
             'purpose' => $purpose,
+            'code' => self::generateCode(),
+            'status' => ClaimStatus::Pending,
+            'expires_at' => now()->addHours((int) config('buildr.claim_code_ttl_hours')),
+        ]);
+    }
+
+    /**
+     * The owner's channel got a new @handle: a code on the new handle proves
+     * it, then completeRename checks the posts match. Blocklisted handles
+     * stay blocklisted; asking again returns the same code.
+     */
+    public function startRename(User $user, Channel $channel, string $new): Claim
+    {
+        if (BlockedUsername::isBlocked($new)) {
+            throw new ClaimException("@{$new} was removed from Buildr and can't be listed again.", 'blocked');
+        }
+
+        $existing = Claim::where('user_id', $user->id)
+            ->where('channel_id', $channel->id)
+            ->where('channel_username', $new)
+            ->where('purpose', ClaimPurpose::Rename)
+            ->active()
+            ->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $this->guardPending($user);
+        $this->ensureIsChannel($new);
+
+        return Claim::create([
+            'user_id' => $user->id,
+            'channel_username' => $new,
+            'channel_id' => $channel->id,
+            'purpose' => ClaimPurpose::Rename,
             'code' => self::generateCode(),
             'status' => ClaimStatus::Pending,
             'expires_at' => now()->addHours((int) config('buildr.claim_code_ttl_hours')),
@@ -138,6 +175,10 @@ class ClaimService
 
         if ($channel->creator?->user_id === $challenger->id) {
             throw new ClaimException("@{$username} is already yours.");
+        }
+
+        if (! Claim::where('user_id', $challenger->id)->where('channel_id', $channel->id)->where('purpose', ClaimPurpose::Dispute)->active()->exists()) {
+            $this->guardPending($challenger);
         }
 
         $expires = now()->addHours((int) config('buildr.claim_code_ttl_hours'));
@@ -168,11 +209,16 @@ class ClaimService
                     'expires_at' => $expires,
                 ]);
 
-            $this->notifier->toUser($owner, "⚠️ Someone else says they own <b>@{$channel->username}</b>. To keep it on your profile, put this code in the channel description within 48 hours: <code>{$theirs->code}</code>");
+            // Only when the dispute is new: asking again must not spam the owner.
+            if ($theirs->wasRecentlyCreated) {
+                $this->notifier->toUser($owner, "⚠️ Someone else says they own <b>@{$channel->username}</b>. To keep it on your profile, put this code in the channel description within 48 hours: <code>{$theirs->code}</code>");
+            }
         }
 
-        $this->notifier->toAdmin("Dispute opened for <b>@{$channel->username}</b>: ".url('/admin/claims'));
-        AuditLog::record('claim.dispute_opened', $channel, ['challenger_id' => $challenger->id], $challenger);
+        if ($mine->wasRecentlyCreated) {
+            $this->notifier->toAdmin("Dispute opened for <b>@{$channel->username}</b>: ".url('/admin/claims'));
+            AuditLog::record('claim.dispute_opened', $channel, ['challenger_id' => $challenger->id], $challenger);
+        }
 
         return [$mine, $theirs];
     }
@@ -186,10 +232,21 @@ class ClaimService
             return $claim;
         }
 
+        // A banned account's claims (removals, disputes, renames) never complete.
+        if ($claim->user?->isBanned()) {
+            $claim->forceFill(['status' => ClaimStatus::Failed])->save();
+
+            return $claim;
+        }
+
         $claim->forceFill(['attempts' => $claim->attempts + 1, 'last_checked_at' => now()])->save();
 
         try {
-            [$foundIn, $msgId] = $this->findCode($claim->channel_username, $claim->code);
+            // Taking a page away from someone (dispute), deleting it (removal) or
+            // moving it (rename) needs the code in the description, which only
+            // the channel's admins can edit; a post can come from a forward or
+            // an auto-posting bot.
+            [$foundIn, $msgId] = $this->findCode($claim->channel_username, $claim->code, postsToo: $claim->purpose === ClaimPurpose::Claim);
         } catch (TelegramFetchException) {
             return $claim;
         }
@@ -248,9 +305,12 @@ class ClaimService
     }
 
     /**
+     * Where the code shows up: the description, or (for a plain claim) one
+     * of the latest posts the channel wrote itself (forwards don't count).
+     *
      * @return array{0: string|null, 1: int|null}
      */
-    public function findCode(string $username, string $code): array
+    public function findCode(string $username, string $code, bool $postsToo = true): array
     {
         $needle = mb_strtolower($code);
         $info = $this->client->channelInfo($username);
@@ -259,15 +319,32 @@ class ClaimService
             return ['description', null];
         }
 
+        if (! $postsToo) {
+            return [null, null];
+        }
+
         $page = $this->client->feed($username);
 
         foreach (array_reverse($page->posts) as $post) {
-            if (str_contains(mb_strtolower((string) $post->text), $needle)) {
+            if (! $post->isForward && str_contains(mb_strtolower((string) $post->text), $needle)) {
                 return ['post', $post->msgId];
             }
         }
 
         return [null, null];
+    }
+
+    /**
+     * Codes waiting at once, per account: enough for real use, too few to
+     * crowd out everyone else's checks.
+     */
+    public const MAX_PENDING = 10;
+
+    private function guardPending(User $user): void
+    {
+        if (Claim::where('user_id', $user->id)->active()->count() >= self::MAX_PENDING) {
+            throw new ClaimException('You have too many codes waiting. Finish those or let them expire first.', 'too_many');
+        }
     }
 
     /**

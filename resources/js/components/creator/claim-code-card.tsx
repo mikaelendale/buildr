@@ -17,9 +17,9 @@ export type ClaimPayload = {
 };
 
 const INTRO: Record<ClaimPayload['purpose'], string> = {
-    claim: 'Paste this code anywhere in your channel description (or post it in the channel). You can delete it after we verify.',
+    claim: 'Paste this code anywhere in your channel description (or post it in the channel yourself; forwards don’t count). You can delete it after we verify.',
     removal:
-        'To prove the channel is yours, paste this code in the channel description (or post it). As soon as we see it, the channel is removed.',
+        'To prove the channel is yours, paste this code in the channel description. As soon as we see it there, the channel is removed.',
     dispute:
         'Whoever can put this code in the channel description first keeps the channel on their profile.',
     rename: 'Paste this code in the description of the channel under its new name, so we can confirm it is the same channel.',

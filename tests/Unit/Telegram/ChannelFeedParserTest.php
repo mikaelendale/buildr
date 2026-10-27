@@ -10,15 +10,15 @@ function syntheticFeed(): array
     return collect($page->posts)->keyBy(fn (ParsedPost $p) => $p->msgId)->all();
 }
 
-it('parses a real channel feed page', function (string $username) {
-    $page = (new ChannelFeedParser)->parse($username, fixtureContents("telegram/feed-{$username}.html"));
+it('parses a full channel feed page', function () {
+    $page = (new ChannelFeedParser)->parse('examplechannel', fixtureContents('telegram/feed-large.html'));
 
     expect($page->posts)->toHaveCount(20)
         ->and($page->olderCursor)->toBeInt()->toBe($page->minMsgId())
         ->and($page->subscribers)->toBeGreaterThan(1_000_000)
         ->and(collect($page->posts)->every(fn (ParsedPost $p) => $p->postedAt !== null))->toBeTrue()
         ->and(collect($page->posts)->filter(fn (ParsedPost $p) => $p->views !== null)->count())->toBeGreaterThan(15);
-})->with(['telegram', 'durov']);
+});
 
 it('reads header info and pagination', function () {
     $page = (new ChannelFeedParser)->parse('testbuilder', fixtureContents('telegram/feed-synthetic.html'));

@@ -8,7 +8,9 @@ use App\Services\Notifications\TelegramNotifier;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +24,9 @@ use Inertia\Response;
  */
 class PasswordResetController extends Controller
 {
+    /** The same for every failure, admins included: no hints about accounts. */
+    private const INVALID = 'This link is invalid or has expired. Ask the bot for a new one with /reset.';
+
     public function create(Request $request): Response
     {
         return Inertia::render('auth/forgot-password', [
@@ -35,8 +40,9 @@ class PasswordResetController extends Controller
         $data = $request->validate(['email' => ['required', 'string', 'email', 'max:254']]);
         $email = Str::lower($data['email']);
 
-        // Sent, throttled or unknown: the answer looks the same.
-        Password::sendResetLink(['email' => $email]);
+        // Sent, throttled or unknown: the answer looks the same. At most a few
+        // links an hour per address, so nobody can flood someone's bot chat.
+        RateLimiter::attempt('reset-link:'.hash('sha256', $email), 3, fn () => Password::sendResetLink(['email' => $email]), 3600);
 
         return back()->with('reset_sent', true)->with('reset_email', $email);
     }
@@ -61,7 +67,7 @@ class PasswordResetController extends Controller
 
         // Admins reset with buildr:make-admin; their accounts never take a link.
         if (User::where('email', $data['email'])->first()?->isAdmin()) {
-            throw ValidationException::withMessages(['email' => 'This link is invalid or has expired.']);
+            throw ValidationException::withMessages(['email' => self::INVALID]);
         }
 
         $changed = null;
@@ -77,12 +83,15 @@ class PasswordResetController extends Controller
         });
 
         if ($status !== Password::PASSWORD_RESET || $changed === null) {
-            throw ValidationException::withMessages(['email' => 'This link is invalid or has expired. Ask the bot for a new one with /reset.']);
+            throw ValidationException::withMessages(['email' => self::INVALID]);
         }
 
         $notifier->passwordChanged($changed);
 
         if ($request->user()?->is($changed)) {
+            // Every other session ends (auth.session); this one carries on.
+            Auth::guard('web')->login($changed, remember: true);
+            $request->session()->put('password_hash_web', Auth::guard('web')->hashPasswordForCookie((string) $changed->getAuthPassword()));
             Inertia::flash('toast', ['type' => 'success', 'message' => 'Password changed.']);
 
             return redirect('/dashboard/settings');

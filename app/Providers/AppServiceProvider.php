@@ -22,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -79,6 +80,18 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null,
         );
+
+        // Links we send out (password resets in the bot, share URLs) are built
+        // from APP_URL, never from the request's Host or X-Forwarded-Host.
+        $root = (string) config('app.url');
+
+        if (app()->isProduction() && $root !== '') {
+            URL::forceRootUrl($root);
+
+            if (str_starts_with($root, 'https://')) {
+                URL::forceScheme('https');
+            }
+        }
     }
 
     /**

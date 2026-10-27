@@ -71,11 +71,14 @@ class SeoController extends Controller
         $path = OgImageRenderer::path($type, $id);
         $disk = Storage::disk('public');
 
+        // Only while the page itself is public: a stored card outlives a
+        // hide, takedown or ban otherwise.
+        $model = $type === 'creator' ? Creator::find($id) : Channel::find($id);
+        $public = $model instanceof Creator ? $model->isPublic() : ($model?->hasPublicPage() ?? false);
+
+        abort_unless($public, 404);
+
         if (! $disk->exists($path)) {
-            $model = $type === 'creator' ? Creator::published()->find($id) : Channel::find($id);
-
-            abort_if($model === null || ($model instanceof Channel && ! $model->hasPublicPage()), 404);
-
             $model instanceof Creator ? $renderer->renderForCreator($model) : $renderer->renderForChannel($model);
         }
 

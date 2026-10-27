@@ -43,7 +43,9 @@ function emailCreator(array $attributes = []): User
  */
 function connectToken(User $user): string
 {
-    $location = (string) test()->actingAs($user)->get('/telegram/connect')->assertRedirect()->headers->get('Location');
+    $location = (string) test()->actingAs($user)
+        ->withSession(['auth.password_confirmed_at' => time()])
+        ->get('/telegram/connect')->assertRedirect()->headers->get('Location');
 
     expect($location)->toStartWith('https://t.me/BuildrTestBot?start='.TelegramLinker::PREFIX);
 
@@ -89,22 +91,43 @@ it('ignores expired or reused links', function () {
     expect($user->fresh()->telegram_id)->toBeNull();
 });
 
-it('moves the Telegram link from an older email account, but never off a Telegram-only one', function () {
-    $old = User::factory()->emailOnly()->create(['email' => 'old@example.com', 'telegram_id' => 555, 'bot_can_message' => true]);
+it('never moves a Telegram account off another Buildr account', function () {
+    // Someone sends the victim their own link: one tap must not hand over the victim's resets.
+    $victim = User::factory()->emailOnly()->create(['email' => 'victim@example.com', 'telegram_id' => 555, 'bot_can_message' => true]);
+    $attacker = emailCreator();
+
+    botSays('/start '.connectToken($attacker));
+
+    expect($attacker->fresh()->telegram_id)->toBeNull()
+        ->and($victim->fresh()->telegram_id)->toBe(555);
+    Http::assertSent(fn ($request) => str_contains($request['text'] ?? '', 'already connected to another Buildr account'));
+});
+
+it('asks for the password before linking when the sign-in is old', function () {
     $user = emailCreator();
+
+    $this->actingAs($user)->get('/telegram/connect')->assertRedirect('/admin/user/confirm-password');
+    expect($user->fresh()->telegram_link_token)->toBeNull();
+});
+
+it('warns the old chat when an account switches to another Telegram', function () {
+    $user = emailCreator(['telegram_id' => 444, 'bot_can_message' => true]);
 
     botSays('/start '.connectToken($user));
 
     expect($user->fresh()->telegram_id)->toBe(555)
-        ->and($old->fresh()->telegram_id)->toBeNull();
+        ->and(sentTo(444, 'connected to a different Telegram account'))->toBeTrue();
+});
 
-    $telegramOnly = User::factory()->create(['email' => null, 'password' => null, 'telegram_id' => 777]);
-    $other = User::factory()->emailOnly()->create(['email' => 'other@example.com']);
+it('caps reset links per address', function () {
+    emailCreator(['telegram_id' => 555, 'bot_can_message' => true]);
 
-    botSays('/start '.connectToken($other), ['id' => 777]);
+    foreach (range(1, 5) as $i) {
+        $this->travel(2)->minutes();
+        $this->post('/forgot-password', ['email' => 'selam@example.com'])->assertSessionHas('reset_sent', true);
+    }
 
-    expect($other->fresh()->telegram_id)->toBeNull()
-        ->and($telegramOnly->fresh()->telegram_id)->toBe(777);
+    Queue::assertPushed(SendTelegramMessage::class, 3);
 });
 
 it('offers the bot right after signing up, then carries on', function () {

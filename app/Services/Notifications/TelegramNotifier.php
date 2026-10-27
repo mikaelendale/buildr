@@ -36,7 +36,9 @@ class TelegramNotifier
         }
 
         $minutes = (int) config('auth.passwords.users.expire', 60);
-        $url = url('/reset-password/'.$token).'?'.http_build_query(['email' => $user->email]);
+        // From APP_URL, never the request's host: a forged Host header must not
+        // be able to point a real reset message at someone else's site.
+        $url = rtrim((string) config('app.url'), '/').'/reset-password/'.$token.'?'.http_build_query(['email' => $user->email]);
 
         return $this->toUser(
             $user,

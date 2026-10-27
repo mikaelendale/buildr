@@ -149,6 +149,14 @@ class Creator extends Model
         return $this->status === CreatorStatus::Published;
     }
 
+    /**
+     * Published and not banned: what may be shown to the public (cards too).
+     */
+    public function isPublic(): bool
+    {
+        return $this->isPublished() && ! $this->user?->isBanned();
+    }
+
     public function url(): string
     {
         return url('/'.$this->slug);

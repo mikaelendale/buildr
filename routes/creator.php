@@ -48,24 +48,27 @@ Route::get('remove', [ClaimPageController::class, 'remove'])->name('remove');
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['auth', 'role:creator'])->group(function () {
-    Route::post('remove', [ClaimPageController::class, 'startRemoval'])->name('remove.start');
+// auth.session: changing the password signs out every other session.
+Route::middleware(['auth', 'auth.session', 'role:creator'])->group(function () {
+    Route::post('remove', [ClaimPageController::class, 'startRemoval'])->middleware('throttle:10,1')->name('remove.start');
 
     Route::get('connect-telegram', [TelegramController::class, 'prompt'])->name('telegram.prompt');
     Route::post('connect-telegram/skip', [TelegramController::class, 'skip'])->name('telegram.skip');
-    Route::get('telegram/connect', [TelegramController::class, 'connect'])->middleware('throttle:20,1')->name('telegram.connect');
+    // Linking a Telegram account hands it password resets: needs the password
+    // within the last few hours (signing in counts), not just a session.
+    Route::get('telegram/connect', [TelegramController::class, 'connect'])->middleware(['password.confirm', 'throttle:20,1'])->name('telegram.connect');
     Route::delete('telegram/connect', [TelegramController::class, 'disconnect'])->name('telegram.disconnect');
 
     Route::get('onboarding', [OnboardingController::class, 'resume'])->name('onboarding');
     Route::post('onboarding/welcome', [OnboardingController::class, 'start'])->name('onboarding.start');
-    Route::post('onboarding/channel', [OnboardingController::class, 'addChannel'])->name('onboarding.channel');
+    Route::post('onboarding/channel', [OnboardingController::class, 'addChannel'])->middleware('throttle:10,1')->name('onboarding.channel');
     Route::post('onboarding/basics', [OnboardingController::class, 'saveBasics'])->name('onboarding.basics');
     Route::post('onboarding/building', [OnboardingController::class, 'continueToReview'])->name('onboarding.building');
     Route::post('onboarding/submit', [OnboardingController::class, 'submit'])->name('onboarding.submit');
     Route::get('onboarding/{step}', [OnboardingController::class, 'show'])->name('onboarding.show');
 
-    Route::post('claims', [ClaimController::class, 'store'])->name('claims.store');
-    Route::post('claims/dispute', [ClaimController::class, 'dispute'])->name('claims.dispute');
+    Route::post('claims', [ClaimController::class, 'store'])->middleware('throttle:10,1')->name('claims.store');
+    Route::post('claims/dispute', [ClaimController::class, 'dispute'])->middleware('throttle:5,1')->name('claims.dispute');
     Route::get('claims/{claim}', [ClaimController::class, 'show'])->name('claims.show');
 
     Route::prefix('api')->name('api.')->group(function () {
@@ -98,7 +101,7 @@ Route::middleware(['auth', 'role:creator'])->group(function () {
 
         Route::get('channels', [ChannelController::class, 'index'])->name('channels');
         Route::post('channels/{channel}/primary', [ChannelController::class, 'primary'])->name('channels.primary');
-        Route::post('channels/{channel}/rename', [ChannelController::class, 'rename'])->name('channels.rename');
+        Route::post('channels/{channel}/rename', [ChannelController::class, 'rename'])->middleware('throttle:10,1')->name('channels.rename');
         Route::put('channels/{channel}/page', [ChannelController::class, 'page'])->name('channels.page');
         Route::delete('channels/{channel}', [ChannelController::class, 'destroy'])->name('channels.destroy');
 

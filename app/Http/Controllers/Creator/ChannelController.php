@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Channel;
 use App\Models\Claim;
 use App\Models\Creator;
+use App\Services\Claims\ClaimException;
 use App\Services\Claims\ClaimService;
 use App\Services\Claims\OwnershipActions;
 use App\Services\Claims\SlugService;
@@ -130,15 +131,11 @@ class ChannelController extends Controller
             throw ValidationException::withMessages(['username' => "@{$new} is already listed on Buildr."]);
         }
 
-        $claim = Claim::create([
-            'user_id' => $request->user()->id,
-            'channel_username' => $new,
-            'channel_id' => $channel->id,
-            'purpose' => ClaimPurpose::Rename,
-            'code' => ClaimService::generateCode(),
-            'status' => ClaimStatus::Pending,
-            'expires_at' => now()->addHours((int) config('buildr.claim_code_ttl_hours')),
-        ]);
+        try {
+            $claim = $claims->startRename($request->user(), $channel, $new);
+        } catch (ClaimException $e) {
+            throw ValidationException::withMessages(['username' => $e->getMessage()]);
+        }
 
         return redirect('/claims/'.$claim->id);
     }

@@ -5,6 +5,7 @@ namespace App\Services\Og;
 use App\Enums\ProjectStatus;
 use App\Models\Channel;
 use App\Models\Creator;
+use App\Services\Profiles\ProfilePageBuilder;
 use App\Services\Profiles\SummaryPresenter;
 use App\Support\LanguageDetector;
 use GdImage;
@@ -128,6 +129,16 @@ class OgImageRenderer
     }
 
     /**
+     * Delete a card in every look (removal, deletion, ban).
+     */
+    public static function forget(string $type, int $id): void
+    {
+        $disk = Storage::disk('public');
+        $disk->delete(self::path($type, $id));
+        $disk->deleteDirectory("og/{$type}/{$id}");
+    }
+
+    /**
      * Where a look of this card is stored: the owner's own at path().
      */
     public static function pathFor(Creator|Channel $model, CardStyle $style): string
@@ -193,9 +204,17 @@ class OgImageRenderer
         }
     }
 
+    /**
+     * Only from channels the owner lists on their profile, like the profile
+     * page itself: a hidden or nameless channel never shows on their card.
+     */
     public function renderForCreator(Creator $creator, ?CardStyle $style = null): ?string
     {
-        $header = $creator->headerChannel();
+        $listed = $creator->channels()->get()
+            ->filter(fn (Channel $c) => $c->isClaimed() && ! $c->isRemoved() && ProfilePageBuilder::listed($c))
+            ->sortBy(fn (Channel $c) => $c->id === $creator->primary_channel_id ? 0 : $c->id)
+            ->values();
+        $header = $listed->first();
         $style ??= CardStyle::for($creator);
 
         return $this->render(
@@ -203,7 +222,7 @@ class OgImageRenderer
             $creator->display_name,
             $header !== null ? '@'.$header->username : null,
             ($header !== null ? $this->presenter->hook($header) : null) ?? $creator->bio ?? $header?->description,
-            $this->facts($header, (int) $creator->channels->sum('subscribers') ?: null),
+            $this->facts($header, (int) $listed->sum('subscribers') ?: null),
             $creator->avatar_path ?? $header?->avatar_path,
             $style,
             url('/'.$creator->slug),

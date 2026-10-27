@@ -144,7 +144,9 @@ class ProjectController extends Controller
     {
         $channel = Channel::find($channelId);
 
-        abort_unless($channel !== null && $channel->isClaimed() && $channel->creator_id === $request->user()->creator?->id, 403);
+        $creator = $request->user()->creator;
+
+        abort_unless($creator !== null && $channel !== null && $channel->isClaimed() && $channel->creator_id === $creator->id, 403);
 
         return $channel;
     }

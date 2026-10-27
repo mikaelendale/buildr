@@ -9,9 +9,11 @@ export default function Seo({ seo }: { seo: SeoProps }) {
     const appName = import.meta.env.VITE_APP_NAME || 'Buildr';
     const fullTitle = `${seo.title} | ${appName}`;
 
+    // The title goes in as the `title` prop, never as <title> children:
+    // Inertia's SSR writes head children raw, and titles carry channel
+    // names anyone can set on Telegram.
     return (
-        <Head>
-            <title>{seo.title}</title>
+        <Head title={seo.title}>
             <meta
                 head-key="description"
                 name="description"

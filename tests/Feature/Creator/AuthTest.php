@@ -76,3 +76,18 @@ it('handles bot webhook updates with the secret token only', function () {
 
     expect($user->refresh()->bot_can_message)->toBeFalse();
 });
+
+it('only sends people back to a page on this site after login', function () {
+    $user = User::factory()->create(['email' => 'selam@example.com', 'password' => 'long-password-1']);
+    Creator::factory()->for($user)->create();
+
+    foreach (['https://evil.example/phish', '//evil.example/phish', '/\evil.example', 'javascript:alert(1)'] as $target) {
+        $this->get('/login?intended='.urlencode($target))->assertOk();
+        $this->post('/login', ['email' => 'selam@example.com', 'password' => 'long-password-1'])->assertRedirect('/dashboard');
+        auth()->logout();
+        session()->forget('url.intended');
+    }
+
+    $this->get('/login?intended=%2Fremove%3Fchannel%3Dselambuilds')->assertOk();
+    $this->post('/login', ['email' => 'selam@example.com', 'password' => 'long-password-1'])->assertRedirect(url('/remove?channel=selambuilds'));
+});

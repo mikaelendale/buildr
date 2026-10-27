@@ -31,8 +31,12 @@ class CreatorLoginController extends Controller
 
     public function create(Request $request): Response
     {
-        if ($request->filled('intended')) {
-            $request->session()->put('url.intended', url((string) $request->query('intended')));
+        // Only a path on this site ("/onboarding"), never an absolute or
+        // protocol-relative URL: that would be an open redirect after login.
+        $intended = (string) $request->query('intended', '');
+
+        if (preg_match('~^/(?![/\\\\])~', $intended) === 1) {
+            $request->session()->put('url.intended', url($intended));
         }
 
         return Inertia::render('auth/creator-login', [
@@ -51,25 +55,27 @@ class CreatorLoginController extends Controller
         ]);
 
         $email = Str::lower($data['email']);
+        // Per address and IP, and per address alone (an IP can be spoofed or shared).
         $key = 'creator-login:'.$email.'|'.$request->ip();
+        $emailKey = 'creator-login-email:'.hash('sha256', $email);
 
-        if (RateLimiter::tooManyAttempts($key, 6)) {
-            throw ValidationException::withMessages(['email' => 'Too many tries. Wait a minute and try again.']);
+        if (RateLimiter::tooManyAttempts($key, 6) || RateLimiter::tooManyAttempts($emailKey, 20)) {
+            throw ValidationException::withMessages(['email' => 'Too many tries. Wait a few minutes and try again.']);
         }
 
         $user = User::where('email', $email)->first();
 
-        if ($user === null || $user->password === null || ! Hash::check($data['password'], $user->password)) {
+        // Admins sign in at /admin/login (with 2FA); here they get the same
+        // answer as a wrong password, so this form never confirms theirs.
+        if ($user === null || $user->isAdmin() || $user->password === null || ! Hash::check($data['password'], $user->password)) {
             RateLimiter::hit($key, 60);
+            RateLimiter::hit($emailKey, 15 * 60);
 
             throw ValidationException::withMessages(['email' => 'That email and password don’t match an account.']);
         }
 
-        if ($user->isAdmin()) {
-            throw ValidationException::withMessages(['email' => 'Admins sign in at /admin/login.']);
-        }
-
         RateLimiter::clear($key);
+        RateLimiter::clear($emailKey);
 
         return $this->signIn($request, $user, 'password');
     }
@@ -140,6 +146,8 @@ class CreatorLoginController extends Controller
         Auth::guard('web')->setRememberDuration(self::REMEMBER_MINUTES);
         Auth::guard('web')->login($user, remember: true);
         $request->session()->regenerate();
+        // They just typed it: sensitive steps right after (connecting Telegram) don't ask again.
+        $request->session()->passwordConfirmed();
 
         $default = $user->creator()->exists() ? '/dashboard' : '/onboarding';
 

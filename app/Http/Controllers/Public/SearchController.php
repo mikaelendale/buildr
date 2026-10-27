@@ -19,7 +19,7 @@ class SearchController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = trim((string) $request->query('q', ''));
+        $query = mb_substr(trim((string) $request->query('q', '')), 0, 100);
         $results = $query === '' ? collect() : $this->search->search($query, 40);
 
         return Inertia::render('public/search', [
@@ -41,7 +41,7 @@ class SearchController extends Controller
      */
     public function suggest(Request $request): JsonResponse
     {
-        $query = trim((string) $request->query('q', ''));
+        $query = mb_substr(trim((string) $request->query('q', '')), 0, 100);
 
         if (mb_strlen($query) < 2) {
             return response()->json(['results' => []]);

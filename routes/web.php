@@ -31,7 +31,7 @@ Route::inertia('takedown-policy', 'public/takedown')->name('takedown');
 
 Route::get('sitemap.xml', [SeoController::class, 'sitemap'])->name('sitemap');
 Route::get('robots.txt', [SeoController::class, 'robots'])->name('robots');
-Route::get('og/{type}/{id}.png', [SeoController::class, 'og'])->whereNumber('id')->name('og');
+Route::get('og/{type}/{id}.png', [SeoController::class, 'og'])->whereNumber('id')->middleware('throttle:120,1')->name('og');
 Route::get('share-card/{type}/{id}.png', ShareCardController::class)->whereNumber('id')->middleware('throttle:60,1')->name('share-card');
 Route::get('media/{path}', MediaController::class)->where('path', 'avatars/[a-z]+/\d+/[a-f0-9]{10}-\d+\.jpg')->name('media');
 

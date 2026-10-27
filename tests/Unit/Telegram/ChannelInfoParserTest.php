@@ -4,18 +4,18 @@ use App\Enums\TelegramPageType;
 use App\Services\Telegram\ChannelInfoParser;
 
 it('parses a public channel page', function () {
-    $info = (new ChannelInfoParser)->parse('durov', fixtureContents('telegram/channel-info-durov.html'));
+    $info = (new ChannelInfoParser)->parse('testbuilder', fixtureContents('telegram/channel-info.html'));
 
     expect($info->pageType)->toBe(TelegramPageType::Channel)
-        ->and($info->title)->toBe('Pavel Durov')
-        ->and($info->description)->toBe('Founder of Telegram.')
-        ->and($info->subscribers)->toBe(10_249_235)
+        ->and($info->title)->toBe('Test Builder')
+        ->and($info->description)->toBe('Shipping small apps every week.')
+        ->and($info->subscribers)->toBe(1_234_567)
         ->and($info->hasPreview)->toBeTrue()
         ->and($info->avatarUrl)->toStartWith('https://cdn');
 });
 
 it('recognises bots', function () {
-    $info = (new ChannelInfoParser)->parse('botfather', fixtureContents('telegram/bot-botfather.html'));
+    $info = (new ChannelInfoParser)->parse('examplehelperbot', fixtureContents('telegram/bot.html'));
 
     expect($info->pageType)->toBe(TelegramPageType::Bot)
         ->and($info->subscribers)->toBeNull();

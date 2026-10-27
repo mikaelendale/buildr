@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin', 'admin.idle'])->group(function () {
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'auth.session', 'role:admin', 'admin.idle'])->group(function () {
     Route::get('security', [SecurityController::class, 'edit'])->middleware(RequirePassword::class)->name('security');
     Route::put('security/password', [SecurityController::class, 'update'])->middleware('throttle:6,1')->name('security.password');
 

@@ -69,6 +69,7 @@ class OwnershipActions
 
         DB::transaction(function () use ($channel, $username, $by, $reason) {
             BlockedUsername::block($username, $reason, $by?->id);
+            self::failPendingClaims($username, $channel?->id);
 
             if ($channel === null) {
                 return;
@@ -141,13 +142,14 @@ class OwnershipActions
 
             // The old claim no longer stands; a real owner can verify again.
             Claim::where('channel_id', $channel->id)->where('status', ClaimStatus::Verified)->update(['status' => ClaimStatus::Expired]);
+            self::failPendingClaims($channel->username, $channel->id);
 
             if ($creator !== null && $creator->primary_channel_id === $channel->id) {
                 $creator->forceFill(['primary_channel_id' => $creator->channels()->where('id', '!=', $channel->id)->where('claim_status', ChannelClaimStatus::Claimed)->value('id')])->save();
             }
         });
 
-        Storage::disk('public')->delete(OgImageRenderer::path('channel', $channel->id));
+        OgImageRenderer::forget('channel', $channel->id);
         $this->indexer->refreshChannel($channel);
 
         if ($creator !== null) {
@@ -165,8 +167,10 @@ class OwnershipActions
         $old = $channel->creator;
         $creator = $this->draftCreatorFor($to);
 
-        // The short link and page choices were the previous owner's.
+        // The short link and page choices were the previous owner's, and so
+        // were any codes still waiting (a rename, say).
         $channel->forceFill(['creator_id' => $creator->id, 'claim_status' => ChannelClaimStatus::Claimed, ...Channel::PAGE_DEFAULTS])->save();
+        self::failPendingClaims($channel->username, $channel->id);
         $channel->projects()->update(['creator_id' => $creator->id]);
         $channel->overrides()->where('source', ContentSource::Creator)->delete();
 
@@ -186,6 +190,18 @@ class OwnershipActions
     }
 
     /**
+     * Codes still waiting on a channel stop counting once it is removed,
+     * released or changes hands.
+     */
+    public static function failPendingClaims(string $username, ?int $channelId = null): int
+    {
+        return Claim::where('status', ClaimStatus::Pending)
+            ->where(fn ($q) => $q->where('channel_username', strtolower($username))
+                ->when($channelId !== null, fn ($q) => $q->orWhere('channel_id', $channelId)))
+            ->update(['status' => ClaimStatus::Failed]);
+    }
+
+    /**
      * Rename (plan §7.6): the creator verified a code on the new handle; we
      * also check that known posts match there before migrating the username.
      */
@@ -194,7 +210,11 @@ class OwnershipActions
         $channel = Channel::find($claim->channel_id);
         $new = TelegramUsername::normalize($claim->channel_username);
 
-        if ($channel === null || $new === null || Channel::where('username', $new)->where('id', '!=', $channel->id)->exists()) {
+        // Still theirs, still listed, and the new handle is free.
+        $theirs = $channel !== null && $channel->isClaimed() && ! $channel->isRemoved()
+            && $channel->creator !== null && $channel->creator->user_id === $claim->user_id;
+
+        if (! $theirs || $new === null || Channel::where('username', $new)->where('id', '!=', $channel->id)->exists()) {
             $claim->forceFill(['status' => ClaimStatus::Failed])->save();
 
             return;
@@ -212,7 +232,8 @@ class OwnershipActions
 
         $matches = collect($page->posts)->filter(fn ($p) => $known->get($p->msgId)?->content_hash === $p->contentHash())->count();
 
-        if ($matches < min(5, $known->count())) {
+        // At least one known post has to match; a channel we know no posts of can't be checked.
+        if ($known->isEmpty() || $matches < min(5, $known->count())) {
             $claim->forceFill(['status' => ClaimStatus::Failed])->save();
             $this->notifier->toUser($claim->user, "We couldn't confirm that @{$new} is the same channel as @{$channel->username}: its posts don't match. Contact us if this is a mistake.");
 
@@ -221,7 +242,6 @@ class OwnershipActions
 
         $old = $channel->username;
         $channel->forceFill(['username' => $new])->save();
-        BlockedUsername::where('username', $old)->delete();
 
         AuditLog::record('channel.renamed', $channel, ['from' => $old, 'to' => $new], $claim->user);
 
@@ -260,7 +280,7 @@ class OwnershipActions
                 $creator->tags()->detach();
                 FeaturedItem::where('featurable_type', 'creator')->where('featurable_id', $creator->id)->delete();
                 $this->indexer->removeEntry($creator);
-                Storage::disk('public')->delete(OgImageRenderer::path('creator', $creator->id));
+                OgImageRenderer::forget('creator', $creator->id);
                 $creator->delete();
             }
 
@@ -290,6 +310,6 @@ class OwnershipActions
             $disk->deleteDirectory(dirname($channel->avatar_path));
         }
 
-        $disk->delete(OgImageRenderer::path('channel', $channel->id));
+        OgImageRenderer::forget('channel', $channel->id);
     }
 }

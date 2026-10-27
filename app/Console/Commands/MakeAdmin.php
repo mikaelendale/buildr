@@ -39,6 +39,14 @@ class MakeAdmin extends Command
         $user = User::firstOrNew(['email' => $email]);
         $exists = $user->exists;
 
+        // Never promote a creator account: anyone already signed in to it
+        // (emails aren't verified) would become an admin without 2FA.
+        if ($exists && ! $user->isAdmin()) {
+            $this->error("{$email} is a creator account. Use a different email for the admin.");
+
+            return self::FAILURE;
+        }
+
         $user->forceFill([
             'name' => $this->option('name') ?: ($user->name ?? Str::before($email, '@')),
             'role' => UserRole::Admin,

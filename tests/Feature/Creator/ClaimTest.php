@@ -16,6 +16,8 @@ use App\Models\Creator;
 use App\Models\Post;
 use App\Models\Summary;
 use App\Models\User;
+use App\Services\Admin\AdminActions;
+use App\Services\Claims\ClaimException;
 use App\Services\Claims\ClaimService;
 use App\Services\Creators\OnboardingProgress;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -27,7 +29,7 @@ use Illuminate\Support\Facades\Http;
  */
 function fakeChannelPages(string $username, string $description = 'Shipping weekly.', string $feedText = 'Hello'): void
 {
-    $info = str_replace('Founder of Telegram.', $description, fixtureContents('telegram/channel-info-durov.html'));
+    $info = str_replace('Shipping small apps every week.', $description, fixtureContents('telegram/channel-info.html'));
     $feed = str_replace('Launched <b>Chapa Bot</b> v1 today!', $feedText, fixtureContents('telegram/feed-synthetic.html'));
 
     // Http::fake() appends stubs; start from a fresh factory so new pages win.
@@ -185,7 +187,7 @@ it('rejects bots, groups, blocklisted and already-claimed channels', function ()
     $user = User::factory()->create();
     Creator::factory()->for($user)->create(['onboarding_step' => 2]);
 
-    Http::fake(['t.me/botfather' => Http::response(fixtureContents('telegram/bot-botfather.html'))]);
+    Http::fake(['t.me/botfather' => Http::response(fixtureContents('telegram/bot.html'))]);
     $this->actingAs($user)->post('/onboarding/channel', ['username' => '@botfather'])->assertSessionHasErrors('username');
 
     BlockedUsername::block('gonechannel');
@@ -243,4 +245,74 @@ it('expires stale codes', function () {
     ]);
 
     expect(app(ClaimService::class)->expireStale())->toBe(1);
+});
+
+it('takes dispute and removal codes from the description only, and never counts forwards', function () {
+    $owner = User::factory()->create();
+    $channel = Channel::factory()->claimedBy(Creator::factory()->for($owner)->create())->create(['username' => 'contested']);
+    $challenger = User::factory()->create();
+
+    [$mine] = app(ClaimService::class)->openDispute($challenger, '@contested');
+
+    // A post (forwarded in, or from a bot) isn't enough to take a page away.
+    fakeChannelPages('contested', 'Shipping weekly.', "my code {$mine->code}");
+    app(ClaimService::class)->check($mine);
+
+    expect($mine->fresh()->status)->toBe(ClaimStatus::Pending)
+        ->and($channel->fresh()->creator->user_id)->toBe($owner->id);
+
+    // A forwarded post never proves a plain claim either.
+    $user = User::factory()->create();
+    $claim = Claim::create([
+        'user_id' => $user->id, 'channel_username' => 'fwdchannel', 'purpose' => ClaimPurpose::Claim,
+        'code' => 'BUILDR-FWD123', 'status' => ClaimStatus::Pending, 'expires_at' => now()->addDay(),
+    ]);
+    Http::swap(new HttpFactory);
+    Http::fake([
+        't.me/s/fwdchannel*' => Http::response(str_replace('A great article on queues.', 'BUILDR-FWD123', fixtureContents('telegram/feed-synthetic.html'))),
+        't.me/fwdchannel' => Http::response(fixtureContents('telegram/channel-info.html')),
+    ]);
+
+    app(ClaimService::class)->check($claim);
+
+    expect($claim->fresh()->status)->toBe(ClaimStatus::Pending);
+});
+
+it('only renames a channel its owner still holds, with posts that match', function () {
+    $user = User::factory()->create();
+    $channel = Channel::factory()->claimedBy(Creator::factory()->for($user)->create())->create(['username' => 'oldname']);
+    fakeChannelPages('newname');
+
+    $this->actingAs($user)->post("/dashboard/channels/{$channel->id}/rename", ['username' => '@newname'])->assertRedirect();
+    $claim = Claim::where('purpose', ClaimPurpose::Rename)->sole();
+
+    // We know no posts of @oldname, so nothing can be matched: no rename.
+    fakeChannelPages('newname', "renamed {$claim->code}");
+    app(ClaimService::class)->check($claim);
+
+    expect($claim->fresh()->status)->toBe(ClaimStatus::Failed)
+        ->and($channel->fresh()->username)->toBe('oldname');
+
+    // A removed handle stays removed.
+    BlockedUsername::block('gonename');
+    $this->actingAs($user)->post("/dashboard/channels/{$channel->id}/rename", ['username' => '@gonename'])->assertSessionHasErrors('username');
+});
+
+it('caps codes waiting per account and cancels them on ban', function () {
+    $user = User::factory()->create();
+    Creator::factory()->for($user)->create();
+
+    foreach (range(1, ClaimService::MAX_PENDING) as $i) {
+        Claim::create([
+            'user_id' => $user->id, 'channel_username' => "pending{$i}", 'purpose' => ClaimPurpose::Removal,
+            'code' => "BUILDR-PEND{$i}", 'status' => ClaimStatus::Pending, 'expires_at' => now()->addDay(),
+        ]);
+    }
+
+    fakeChannelPages('onemore');
+    expect(fn () => app(ClaimService::class)->start($user, '@onemore'))->toThrow(ClaimException::class);
+
+    app(AdminActions::class)->ban($user, User::factory()->admin()->create(), 'Spam');
+
+    expect(Claim::where('user_id', $user->id)->where('status', ClaimStatus::Pending)->count())->toBe(0);
 });

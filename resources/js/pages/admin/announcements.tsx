@@ -207,7 +207,7 @@ export default function Announcements({ counts, footer, history }: Props) {
                                             e.target.value,
                                         )
                                     }
-                                    placeholder="https://buildr.mikaelen.site/dashboard"
+                                    placeholder="https://your-site.com/dashboard"
                                     className="font-mono text-xs"
                                 />
                                 <InputError message={form.errors.button_url} />
