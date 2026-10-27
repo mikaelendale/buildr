@@ -10,9 +10,10 @@ beforeEach(function () {
     Queue::fake();
 });
 
-it('creates a creator account and sends them to onboarding', function () {
+it('creates a creator account and sends them to onboarding (via the Telegram step)', function () {
     $this->post('/register', ['name' => 'Selam Tesfaye', 'email' => 'Selam@Example.com', 'password' => 'long-password-1'])
-        ->assertRedirect('/onboarding');
+        ->assertRedirect('/connect-telegram');
+    $this->post('/connect-telegram/skip')->assertRedirect(url('/onboarding'));
 
     $user = User::where('email', 'selam@example.com')->first();
 

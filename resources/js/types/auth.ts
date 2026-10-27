@@ -8,6 +8,7 @@ export type User = {
     is_admin: boolean;
     two_factor_enabled: boolean;
     bot_can_message: boolean;
+    telegram_connected: boolean;
     has_creator: boolean;
     creator_slug: string | null;
 };

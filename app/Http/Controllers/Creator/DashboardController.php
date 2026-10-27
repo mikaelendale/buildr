@@ -71,6 +71,7 @@ class DashboardController extends Controller
             // Channels still being read/written (or just finished), with live stages.
             'building' => $progress->building($creator),
             'botCanMessage' => $user->bot_can_message,
+            'telegram' => ['connected' => $user->hasTelegram(), 'username' => $user->telegram_username],
         ]);
     }
 }

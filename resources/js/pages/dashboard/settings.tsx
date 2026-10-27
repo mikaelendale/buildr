@@ -1,28 +1,138 @@
-import { useForm } from '@inertiajs/react';
-import { useMemo } from 'react';
+import { router, useForm } from '@inertiajs/react';
+import { KeyRound } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import AppearanceTabs from '@/components/appearance-tabs';
 import { FormSection, selectClass } from '@/components/creator/basics-form';
+import {
+    ConnectTelegramButton,
+    TelegramConnected,
+    useTelegramLink,
+} from '@/components/creator/telegram-connect';
+import type { TelegramLink } from '@/components/creator/telegram-connect';
 import InputError from '@/components/input-error';
 import PageContainer from '@/components/page-container';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 
 type Props = {
     settings: {
         timezone: string;
         notify_summary_digest: boolean;
+        notify_product_updates: boolean;
         bot_can_message: boolean;
         slug: string | null;
     };
+    telegram: TelegramLink & { connected_at: string | null };
     botUsername: string | null;
 };
 
-export default function SettingsPage({ settings, botUsername }: Props) {
+/**
+ * The bot is the only way we reach people (no email): connect it, see
+ * whether updates are paused, get a password link, or disconnect.
+ */
+function TelegramSection({
+    initial,
+    canMessage,
+    botUsername,
+}: {
+    initial: TelegramLink;
+    canMessage: boolean;
+    botUsername: string | null;
+}) {
+    const link = useTelegramLink(initial);
+    const [sending, setSending] = useState(false);
+
+    return (
+        <FormSection
+            title="Telegram"
+            description="There’s no email: our bot is how you reset your password and hear about your page."
+        >
+            {link.connected ? (
+                <>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <TelegramConnected username={link.username} />
+                        {!canMessage && botUsername && (
+                            <span className="text-xs text-muted-foreground">
+                                Updates are paused. Send /start to{' '}
+                                <a
+                                    href={`https://t.me/${botUsername}`}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="font-mono text-foreground underline decoration-border underline-offset-4"
+                                >
+                                    @{botUsername}
+                                </a>{' '}
+                                to turn them back on.
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={sending}
+                            onClick={() =>
+                                router.post(
+                                    '/dashboard/settings/password-link',
+                                    {},
+                                    {
+                                        preserveScroll: true,
+                                        onStart: () => setSending(true),
+                                        onFinish: () => setSending(false),
+                                    },
+                                )
+                            }
+                        >
+                            {sending ? <Spinner /> : <KeyRound />}
+                            Change password
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="text-muted-foreground"
+                            onClick={() =>
+                                router.delete('/telegram/connect', {
+                                    preserveScroll: true,
+                                })
+                            }
+                        >
+                            Disconnect
+                        </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Change password sends a link to the bot. Forgot it while
+                        logged out? Send /reset to the bot.
+                    </p>
+                </>
+            ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                    <ConnectTelegramButton
+                        waiting={link.waiting}
+                        onStart={link.start}
+                    />
+                    <span className="text-xs text-pretty text-muted-foreground">
+                        {link.waiting
+                            ? `Press Start in @${botUsername ?? 'the bot'}, then come back here.`
+                            : 'Without it you can’t reset a forgotten password.'}
+                    </span>
+                </div>
+            )}
+        </FormSection>
+    );
+}
+
+export default function SettingsPage({
+    settings,
+    telegram,
+    botUsername,
+}: Props) {
     const form = useForm({
         timezone: settings.timezone,
         notify_summary_digest: settings.notify_summary_digest,
+        notify_product_updates: settings.notify_product_updates,
     });
     const deletion = useForm({ confirm: '', keep_channels: false });
 
@@ -40,6 +150,13 @@ export default function SettingsPage({ settings, botUsername }: Props) {
 
     return (
         <PageContainer title="Settings">
+            <TelegramSection
+                key={telegram.connected ? 'on' : 'off'}
+                initial={telegram}
+                canMessage={settings.bot_can_message}
+                botUsername={botUsername}
+            />
+
             <form
                 onSubmit={(e) => {
                     e.preventDefault();
@@ -83,20 +200,29 @@ export default function SettingsPage({ settings, botUsername }: Props) {
                         <span className="text-sm">
                             Weekly Telegram message when the AI updates my
                             profile
-                            {!settings.bot_can_message && botUsername && (
+                            {!telegram.connected && (
                                 <span className="block text-xs text-muted-foreground">
-                                    Press Start in{' '}
-                                    <a
-                                        href={`https://t.me/${botUsername}`}
-                                        className="font-mono text-foreground underline decoration-border underline-offset-4"
-                                        target="_blank"
-                                        rel="noopener"
-                                    >
-                                        @{botUsername}
-                                    </a>{' '}
-                                    so we can message you.
+                                    Connect Telegram above to get it.
                                 </span>
                             )}
+                        </span>
+                    </label>
+
+                    <label className="flex items-start gap-3">
+                        <Checkbox
+                            checked={form.data.notify_product_updates}
+                            onCheckedChange={(v) =>
+                                form.setData(
+                                    'notify_product_updates',
+                                    v === true,
+                                )
+                            }
+                        />
+                        <span className="text-sm">
+                            Telegram message when Buildr ships something new
+                            <span className="block text-xs text-muted-foreground">
+                                A few times a month at most.
+                            </span>
                         </span>
                     </label>
 

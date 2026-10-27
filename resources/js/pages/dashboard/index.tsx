@@ -5,6 +5,12 @@ import {
     useBuildingChannels,
 } from '@/components/creator/channel-progress';
 import type { ChannelProgress } from '@/components/creator/channel-progress';
+import {
+    ConnectTelegramButton,
+    TelegramConnected,
+    useTelegramLink,
+} from '@/components/creator/telegram-connect';
+import type { TelegramLink } from '@/components/creator/telegram-connect';
 import Glyph from '@/components/figures/glyph';
 import type { GlyphName } from '@/components/figures/glyph';
 import PageContainer from '@/components/page-container';
@@ -54,6 +60,7 @@ type Props = {
     };
     subscribers: number;
     botCanMessage: boolean;
+    telegram: TelegramLink;
     building?: ChannelProgress[];
 };
 
@@ -130,6 +137,69 @@ const QUICK: { href: string; title: string; body: string; glyph: GlyphName }[] =
         },
     ];
 
+/**
+ * Until the bot is connected we can't reach them (no email): no password
+ * resets, no updates. Connected but paused: one tap to turn updates on.
+ */
+function TelegramBanner({
+    telegram,
+    paused,
+    bot,
+}: {
+    telegram: TelegramLink;
+    paused: boolean;
+    bot: string;
+}) {
+    const link = useTelegramLink(telegram);
+
+    return (
+        <div className="group flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-border p-4 sm:p-5">
+            <Glyph name="send" className="size-10" />
+            {/* Wide enough that on phones the button drops to its own line. */}
+            <p className="min-w-[13rem] flex-1 text-sm text-pretty text-muted-foreground">
+                {link.connected && !paused ? (
+                    <TelegramConnected username={link.username} />
+                ) : paused ? (
+                    <>
+                        <span className="font-medium text-foreground">
+                            Updates are paused.
+                        </span>{' '}
+                        Send /start to the bot to hear about your page again.
+                    </>
+                ) : (
+                    <>
+                        <span className="font-medium text-foreground">
+                            Connect Telegram.
+                        </span>{' '}
+                        It&apos;s how you reset your password and hear when your
+                        page changes.
+                    </>
+                )}
+            </p>
+            {paused ? (
+                <Button asChild size="sm" variant="outline">
+                    <a
+                        href={`https://t.me/${bot}`}
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        Open <span className="font-mono">@{bot}</span>
+                    </a>
+                </Button>
+            ) : (
+                !link.connected && (
+                    <ConnectTelegramButton
+                        size="sm"
+                        variant="outline"
+                        waiting={link.waiting}
+                        onStart={link.start}
+                    />
+                )
+            )}
+        </div>
+    );
+}
+
 export default function Dashboard({
     creator,
     channels,
@@ -137,6 +207,7 @@ export default function Dashboard({
     views,
     subscribers,
     botCanMessage,
+    telegram,
     building: initialBuilding = [],
 }: Props) {
     // Channels being added (or just finished) update live; when one lands,
@@ -350,27 +421,12 @@ export default function Dashboard({
                 </StatPanel>
             )}
 
-            {!botCanMessage && telegramBot && (
-                <div className="group flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-border p-4 sm:p-5">
-                    <Glyph name="send" className="size-10" />
-                    <p className="min-w-0 flex-1 text-sm text-pretty text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                            We can&apos;t message you yet.
-                        </span>{' '}
-                        Open our bot and press Start to get updates about your
-                        profile.
-                    </p>
-                    <Button asChild size="sm" variant="outline">
-                        <a
-                            href={`https://t.me/${telegramBot}?start=dashboard`}
-                            target="_blank"
-                            rel="noopener"
-                        >
-                            Open{' '}
-                            <span className="font-mono">@{telegramBot}</span>
-                        </a>
-                    </Button>
-                </div>
+            {telegramBot && (!telegram.connected || !botCanMessage) && (
+                <TelegramBanner
+                    telegram={telegram}
+                    paused={telegram.connected && !botCanMessage}
+                    bot={telegramBot}
+                />
             )}
 
             {pendingClaims.length > 0 && (

@@ -47,6 +47,20 @@ class UserFactory extends Factory
     }
 
     /**
+     * A creator who signed up with email and hasn't connected the bot.
+     */
+    public function emailOnly(): static
+    {
+        return $this->state(fn () => [
+            'email' => fake()->unique()->safeEmail(),
+            'password' => 'long-password-1',
+            'telegram_id' => null,
+            'telegram_username' => null,
+            'bot_can_message' => false,
+        ]);
+    }
+
+    /**
      * An admin account (email + password, no Telegram).
      */
     public function admin(): static

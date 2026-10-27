@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, Link } from '@inertiajs/react';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
@@ -21,13 +21,13 @@ type Props = {
 const PROMISES = [
     'An account is just your email and a password. Nothing to install.',
     'You prove a channel is yours with a short code in its bio. We never get access to it.',
+    'Connect our Telegram bot after you log in: it’s how you reset your password and get updates.',
 ];
 
 export default function CreatorLogin({
     mode: initialMode,
     devLogin,
     status,
-    support,
 }: Props) {
     const [mode, setMode] = useState<Mode>(initialMode);
     const register = mode === 'register';
@@ -93,7 +93,17 @@ export default function CreatorLogin({
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="password">Password</Label>
+                                <div className="flex items-baseline justify-between gap-3">
+                                    <Label htmlFor="password">Password</Label>
+                                    {!register && (
+                                        <Link
+                                            href="/forgot-password"
+                                            className="text-xs text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground"
+                                        >
+                                            Forgot password?
+                                        </Link>
+                                    )}
+                                </div>
                                 <PasswordInput
                                     id="password"
                                     name="password"
@@ -135,25 +145,6 @@ export default function CreatorLogin({
                         </li>
                     ))}
                 </ul>
-
-                {!register && (
-                    <p className="text-center text-xs text-muted-foreground">
-                        Forgot your password?{' '}
-                        {support ? (
-                            <a
-                                href={`https://t.me/${support}`}
-                                target="_blank"
-                                rel="noopener"
-                                className="text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
-                            >
-                                Message us
-                            </a>
-                        ) : (
-                            'Message the Buildr team'
-                        )}{' '}
-                        and we&apos;ll reset it.
-                    </p>
-                )}
 
                 {devLogin && (
                     <Form

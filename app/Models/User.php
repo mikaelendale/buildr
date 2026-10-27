@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\UserRole;
+use App\Services\Notifications\TelegramNotifier;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -20,6 +21,10 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $name
  * @property int|null $telegram_id
  * @property string|null $telegram_username
+ * @property string|null $telegram_link_token
+ * @property Carbon|null $telegram_link_expires_at
+ * @property Carbon|null $telegram_linked_at
+ * @property Carbon|null $telegram_prompted_at
  * @property string|null $first_name
  * @property string|null $last_name
  * @property string|null $avatar_path
@@ -29,6 +34,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string|null $password
  * @property bool $bot_can_message
  * @property bool $notify_summary_digest
+ * @property bool $notify_product_updates
  * @property string|null $timezone
  * @property Carbon|null $banned_at
  * @property string|null $ban_reason
@@ -45,7 +51,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
     'avatar_path', 'role', 'bot_can_message', 'notify_summary_digest', 'timezone', 'banned_at',
     'ban_reason', 'last_login_at',
 ])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'telegram_id'])]
+#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'telegram_id', 'telegram_link_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -64,6 +70,10 @@ class User extends Authenticatable
             'password' => 'hashed',
             'bot_can_message' => 'boolean',
             'notify_summary_digest' => 'boolean',
+            'notify_product_updates' => 'boolean',
+            'telegram_link_expires_at' => 'datetime',
+            'telegram_linked_at' => 'datetime',
+            'telegram_prompted_at' => 'datetime',
             'banned_at' => 'datetime',
             'last_login_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
@@ -99,6 +109,26 @@ class User extends Authenticatable
         return $this->role === UserRole::Admin;
     }
 
+    /**
+     * Linked to the bot: password resets and updates reach them on Telegram.
+     */
+    public function hasTelegram(): bool
+    {
+        return $this->telegram_id !== null;
+    }
+
+    /**
+     * Reset links go out through the bot, never by email (there is no
+     * mailer). Accounts without Telegram get nothing; an admin can hand
+     * them a link with buildr:reset-link.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        app(TelegramNotifier::class)->passwordReset($this, $token);
+    }
+
     public function isBanned(): bool
     {
         return $this->banned_at !== null;
@@ -131,6 +161,7 @@ class User extends Authenticatable
             'is_admin' => $this->isAdmin(),
             'two_factor_enabled' => $this->hasConfirmedTwoFactor(),
             'bot_can_message' => $this->bot_can_message,
+            'telegram_connected' => $this->hasTelegram(),
             'has_creator' => $this->creator !== null,
             'creator_slug' => $this->creator?->slug,
         ];

@@ -277,6 +277,7 @@ class ProcessChannel implements ShouldQueue
 
     private function finish(Channel $channel): void
     {
+        $firstRun = $channel->last_processed_at === null;
         $channel->forceFill(['last_processed_at' => now(), 'last_error' => null])->save();
 
         // Admin-added, unclaimed channels land in the review queue.
@@ -290,6 +291,13 @@ class ProcessChannel implements ShouldQueue
             app(TelegramNotifier::class)->toUser(
                 $creator->user,
                 "✨ Your Buildr profile draft for <b>@{$channel->username}</b> is ready. Review it and submit: ".url('/onboarding'),
+            );
+        } elseif ($firstRun && $channel->isClaimed() && $creator?->isPublished()) {
+            // A channel added to a live profile: say so once, not on every refresh.
+            app(TelegramNotifier::class)->toUser(
+                $creator->user,
+                "✨ <b>@{$channel->username}</b> is ready on Buildr.",
+                [['text' => 'See its page', 'url' => $channel->publicUrl()]],
             );
         }
     }

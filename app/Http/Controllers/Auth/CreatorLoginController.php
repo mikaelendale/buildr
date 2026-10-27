@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Creator\TelegramController;
 use App\Models\LoginEvent;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -20,8 +21,9 @@ use Inertia\Response;
 /**
  * Creator accounts: email + password on the web. Owning a channel is proven
  * separately (the claim code in the channel bio), so the account itself
- * needs nothing from Telegram. Admins sign in at /admin/login (with 2FA)
- * and are refused here.
+ * needs nothing from Telegram; connecting the bot (offered right after
+ * signing in) adds password resets and updates. Admins sign in at
+ * /admin/login (with 2FA) and are refused here.
  */
 class CreatorLoginController extends Controller
 {
@@ -139,6 +141,15 @@ class CreatorLoginController extends Controller
         Auth::guard('web')->login($user, remember: true);
         $request->session()->regenerate();
 
-        return redirect()->intended($user->creator()->exists() ? '/dashboard' : '/onboarding');
+        $default = $user->creator()->exists() ? '/dashboard' : '/onboarding';
+
+        // Offer the bot first (password resets and updates live there), then carry on.
+        if (TelegramController::shouldPrompt($user, $method)) {
+            $request->session()->put('telegram.next', $request->session()->pull('url.intended', url($default)));
+
+            return redirect('/connect-telegram');
+        }
+
+        return redirect()->intended($default);
     }
 }

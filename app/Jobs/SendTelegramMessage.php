@@ -23,11 +23,24 @@ class SendTelegramMessage implements ShouldQueue
      */
     public array $backoff = [30, 120];
 
+    /**
+     * URL buttons under the message, one per row. A plain property (not
+     * promoted) so jobs queued before it existed still unserialize.
+     *
+     * @var list<array{text: string, url: string}>
+     */
+    public array $buttons = [];
+
+    /**
+     * @param  list<array{text: string, url: string}>  $buttons
+     */
     public function __construct(
         public int|string $chatId,
         public string $html,
         public ?int $userId = null,
+        array $buttons = [],
     ) {
+        $this->buttons = $buttons;
         $this->onQueue('default');
     }
 
@@ -39,7 +52,9 @@ class SendTelegramMessage implements ShouldQueue
             return;
         }
 
-        $response = $bot->sendMessage($this->chatId, $this->html);
+        $response = $bot->sendMessage($this->chatId, $this->html, $this->buttons === [] ? [] : [
+            'reply_markup' => ['inline_keyboard' => array_map(fn (array $button) => [$button], $this->buttons)],
+        ]);
 
         if ($response->successful()) {
             return;

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\CreatorLoginController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Creator\CardStyleController;
 use App\Http\Controllers\Creator\ChannelController;
 use App\Http\Controllers\Creator\ClaimController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Creator\ProfileController;
 use App\Http\Controllers\Creator\ProjectController;
 use App\Http\Controllers\Creator\SettingsController;
 use App\Http\Controllers\Creator\SummaryController;
+use App\Http\Controllers\Creator\TelegramController;
 use App\Http\Controllers\Public\ClaimPageController;
 use App\Http\Controllers\TelegramWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -25,7 +27,14 @@ Route::middleware('guest')->group(function () {
     Route::post('login', [CreatorLoginController::class, 'login'])->middleware('throttle:20,1')->name('creator.login.store');
     Route::post('register', [CreatorLoginController::class, 'register'])->middleware('throttle:6,1')->name('creator.register');
     Route::post('auth/dev-login', [CreatorLoginController::class, 'devLogin'])->name('creator.dev-login');
+    Route::get('forgot-password', [PasswordResetController::class, 'create'])->name('password.request');
+    Route::post('forgot-password', [PasswordResetController::class, 'store'])->middleware('throttle:6,1')->name('password.email');
 });
+
+// Reset links go to the account's Telegram (the bot), never by email. They
+// work signed in too (from a "Change password" in settings, say).
+Route::get('reset-password/{token}', [PasswordResetController::class, 'edit'])->name('password.reset');
+Route::post('reset-password', [PasswordResetController::class, 'update'])->middleware('throttle:10,1')->name('password.update');
 
 Route::post('logout', [CreatorLoginController::class, 'destroy'])->middleware('auth')->name('creator.logout');
 Route::post('telegram/webhook', TelegramWebhookController::class)->name('telegram.webhook');
@@ -41,6 +50,11 @@ Route::get('remove', [ClaimPageController::class, 'remove'])->name('remove');
 
 Route::middleware(['auth', 'role:creator'])->group(function () {
     Route::post('remove', [ClaimPageController::class, 'startRemoval'])->name('remove.start');
+
+    Route::get('connect-telegram', [TelegramController::class, 'prompt'])->name('telegram.prompt');
+    Route::post('connect-telegram/skip', [TelegramController::class, 'skip'])->name('telegram.skip');
+    Route::get('telegram/connect', [TelegramController::class, 'connect'])->middleware('throttle:20,1')->name('telegram.connect');
+    Route::delete('telegram/connect', [TelegramController::class, 'disconnect'])->name('telegram.disconnect');
 
     Route::get('onboarding', [OnboardingController::class, 'resume'])->name('onboarding');
     Route::post('onboarding/welcome', [OnboardingController::class, 'start'])->name('onboarding.start');
@@ -58,6 +72,7 @@ Route::middleware(['auth', 'role:creator'])->group(function () {
         Route::post('claims/{claim}/check', [ClaimController::class, 'check'])->middleware('throttle:claim-check')->name('claims.check');
         Route::get('onboarding/progress', [OnboardingController::class, 'progress'])->name('onboarding.progress');
         Route::get('channels/progress', [OnboardingController::class, 'channelsProgress'])->name('channels.progress');
+        Route::get('telegram/status', [TelegramController::class, 'status'])->name('telegram.status');
         Route::get('slug-check', [ClaimController::class, 'slug'])->middleware('throttle:60,1')->name('slug-check');
     });
 
@@ -91,6 +106,7 @@ Route::middleware(['auth', 'role:creator'])->group(function () {
 
         Route::get('settings', [SettingsController::class, 'edit'])->name('settings');
         Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::post('settings/password-link', [SettingsController::class, 'passwordLink'])->middleware('throttle:3,1')->name('settings.password-link');
         Route::delete('settings/account', [SettingsController::class, 'destroy'])->name('settings.destroy');
     });
 });
