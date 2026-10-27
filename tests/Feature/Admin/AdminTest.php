@@ -5,6 +5,7 @@ use App\Enums\ChannelVisibility;
 use App\Enums\CreatorStatus;
 use App\Enums\ReportStatus;
 use App\Enums\SummaryStatus;
+use App\Jobs\Ai\ProcessChannel;
 use App\Jobs\Scrape\FetchChannelInfo;
 use App\Models\AuditLog;
 use App\Models\BlockedUsername;
@@ -198,3 +199,43 @@ it('renders every admin page', function (string $url) {
 
     $this->actingAs(admin())->get($url)->assertOk();
 })->with(['/admin/review', '/admin/channels', '/admin/channels/new', '/admin/creators', '/admin/claims', '/admin/reports', '/admin/jobs', '/admin/ai-costs', '/admin/featured', '/admin/tags', '/admin/blocklist', '/admin/audit']);
+
+it('acts on many queue items at once and skips ones that already changed', function () {
+    $admin = admin();
+    $first = submittedCreator();
+    $user = User::factory()->create();
+    $second = Creator::factory()->for($user)->pendingReview()->create(['slug' => 'dawit', 'display_name' => 'Dawit']);
+    $done = Creator::factory()->for(User::factory()->create())->published()->create(['slug' => 'done']);
+
+    $this->actingAs($admin)->get('/admin/review')->assertInertia(fn (Assert $page) => $page
+        ->where('creators.0.profile', 'ready')
+        ->where('creators.1.profile', 'none'));
+
+    $this->actingAs($admin)->post('/admin/review/bulk', ['action' => 'approve_creators', 'ids' => [$first->id, $second->id, $done->id]])
+        ->assertRedirect('/admin/review')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Approved and published 2. Skipped 1 that had already changed.');
+
+    expect($first->fresh()->status)->toBe(CreatorStatus::Published)
+        ->and($second->fresh()->status)->toBe(CreatorStatus::Published);
+
+    // Rewriting queues one pipeline run per channel.
+    $channel = Channel::factory()->create(['username' => 'needsawrite']);
+    $this->actingAs($admin)->post('/admin/review/bulk', ['action' => 'regenerate', 'ids' => [$channel->id]])->assertRedirect();
+    Bus::assertDispatched(ProcessChannel::class, fn ($job) => $job->channelId === $channel->id && $job->step === 'summary_start');
+
+    // Approving failed drafts anyway.
+    $failed = Summary::create([
+        'channel_id' => $channel->id, 'version' => 1, 'mode' => 'unclaimed', 'status' => SummaryStatus::FailedVerification,
+        'prompt_version' => 1, 'triggered_by' => 'system', 'content' => ['intro' => 'Builds tools'], 'citations' => ['intro' => [1]],
+        'verification' => ['passed' => false, 'dropped' => [['section' => 'hook', 'item' => 'x', 'reason' => 'unsupported']], 'llm' => []],
+    ]);
+    $this->actingAs($admin)->get('/admin/review')->assertInertia(fn (Assert $page) => $page
+        ->where('failed.0.missing', ['hook'])
+        ->where('failed.0.dropped', 1)
+        ->where('failed.0.has_live', false));
+    $this->actingAs($admin)->post('/admin/review/bulk', ['action' => 'approve_summaries', 'ids' => [$failed->id]])->assertRedirect();
+    expect($failed->fresh()->status)->toBe(SummaryStatus::Approved);
+
+    // Creators can't.
+    $this->actingAs(User::factory()->create())->post('/admin/review/bulk', ['action' => 'regenerate', 'ids' => [$channel->id]])->assertForbidden();
+});

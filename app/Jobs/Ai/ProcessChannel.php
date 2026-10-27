@@ -59,6 +59,9 @@ class ProcessChannel implements ShouldQueue
     /** Channels waiting for AI quota: channel id → the step to resume. */
     public const PAUSED_KEY = 'ai-quota:paused-channels';
 
+    /** Drafts written per run before a failing summary goes to admin review. */
+    public const MAX_DRAFTS = 3;
+
     /** Latest pause, for the admin banner: until + provider message. */
     public const PAUSE_KEY = 'ai-quota:pause';
 
@@ -242,9 +245,10 @@ class ProcessChannel implements ShouldQueue
             return ['index'];
         }
 
-        // Required section failed: regenerate once from the same digests (plan §8.7),
+        // Required section failed: write again from the same digests (plan §8.7),
         // telling the writer what the fact-checker rejected so it doesn't repeat it.
-        if ($this->attempt < 2) {
+        // Up to MAX_DRAFTS drafts in all; each retry costs about a cent.
+        if ($this->attempt < self::MAX_DRAFTS) {
             /** @var list<array{section: string, reason: ?string}> $dropped */
             $dropped = $summary->verification['dropped'] ?? [];
             $feedback = collect($dropped)
@@ -267,12 +271,62 @@ class ProcessChannel implements ShouldQueue
                 'verification' => ['feedback' => $feedback],
             ]);
 
-            return ['summary_reduce', $retry->id, 2];
+            return ['summary_reduce', $retry->id, $this->attempt + 1];
         }
 
-        app(TelegramNotifier::class)->toAdmin("Summary for <b>@{$channel->username}</b> failed verification twice and is waiting in the review queue.");
+        // Out of drafts. A channel with no profile yet gets this one with the
+        // parts the fact-checker couldn't back left out (they're already
+        // stripped); a channel that has a profile keeps it. Only a draft with
+        // nothing left waits for a person.
+        if (self::acceptWithGaps($summary)) {
+            return ['index'];
+        }
+
+        app(TelegramNotifier::class)->toAdmin('Summary for <b>@'.$channel->username.'</b> failed verification '.self::MAX_DRAFTS.' times and is waiting in the review queue.');
 
         return ['index'];
+    }
+
+    /**
+     * Publish a draft that failed only on its hook or intro, with those
+     * parts empty (a missing hook takes the intro's first sentence, which
+     * passed the check). Not when the channel already has a good profile,
+     * and not when too little survived. Returns whether it was accepted.
+     */
+    public static function acceptWithGaps(Summary $summary): bool
+    {
+        $content = (array) $summary->content;
+
+        $hasLive = Summary::where('channel_id', $summary->channel_id)
+            ->where('id', '!=', $summary->id)
+            ->whereIn('status', [SummaryStatus::Verified, SummaryStatus::Approved])
+            ->exists();
+
+        $sections = collect(['building_now', 'eras', 'start_here', 'in_their_words', 'fun_facts', 'how_they_work'])
+            ->filter(fn (string $key) => filled($content[$key] ?? null))
+            ->count();
+        $substance = filled($content['hook'] ?? null) || filled($content['intro'] ?? null) || $sections >= 2;
+
+        if ($hasLive || ! $substance) {
+            return false;
+        }
+
+        $missing = array_values(array_filter(['hook', 'intro'], fn (string $key) => blank($content[$key] ?? null)));
+        $citations = (array) $summary->citations;
+
+        if (blank($content['hook'] ?? null) && filled($content['intro'] ?? null)) {
+            $content['hook'] = Str::of((string) $content['intro'])->match('/^.+?[.!?](?=\s|$)/u')->whenEmpty(fn () => Str::of((string) $content['intro']))->limit(160)->toString();
+            $citations['hook'] = $citations['intro'] ?? [];
+        }
+
+        $summary->forceFill([
+            'content' => $content,
+            'citations' => $citations,
+            'status' => SummaryStatus::Verified,
+            'verification' => array_merge((array) $summary->verification, ['passed' => true, 'partial' => true, 'missing' => $missing]),
+        ])->save();
+
+        return true;
     }
 
     private function finish(Channel $channel): void

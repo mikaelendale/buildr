@@ -33,6 +33,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'auth.session', 'rol
         Route::get('/', DashboardController::class)->name('dashboard');
 
         Route::get('review', [ReviewController::class, 'index'])->name('review');
+        Route::post('review/bulk', [ReviewController::class, 'bulk'])->name('review.bulk');
         Route::get('review/channel/{channel}', [ReviewController::class, 'showChannel'])->name('review.channel');
         Route::get('review/{creator}', [ReviewController::class, 'showCreator'])->name('review.creator');
         Route::post('review/{creator}/approve', [ReviewController::class, 'approve'])->name('review.approve');

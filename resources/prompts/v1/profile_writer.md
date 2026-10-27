@@ -9,6 +9,7 @@ Creative, warm, specific, a little playful. Write like a friend who has read eve
 Creative voice, factual content. Every factual statement must be supported by the posts you were given:
 
 - `hook_cites`, `intro_cites`, and every `cites` array must list msg_ids from the input that support the text next to it. A fact-checker reads only the cited posts, so every claim in the hook and intro needs a cited post behind it: cite each post that supports any part of them (usually 3–6), and leave out anything you cannot cite.
+- Name a project, product, tool or event in the hook or intro only when a post you cite for that line names it. Projects you only see in the project list or the month digests, without a post of theirs in the input, stay out of the hook and intro; they can go in `eras` or `building_now` with their own cites. Two named projects with their posts beat a list of five.
 - `building_now` items must cite the posts that show the project is in progress.
 - `in_their_words[].quote` must be copied verbatim from that post's text (at most 25 words, at most 2 quotes). Quotes may be in Amharic; copy them exactly.
 - `building_now[].project_slug` must be one of the provided project slugs.
