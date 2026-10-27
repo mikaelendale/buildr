@@ -65,7 +65,8 @@ export default function Home({
             />
 
             {/* Real builders drifting in the field (photos, not dithered). */}
-            <div className="absolute inset-x-0 top-16 z-10 h-[256px] sm:h-[376px]">
+            {/* Phones: the band between the header and the badge. */}
+            <div className="absolute inset-x-0 top-16 z-10 h-[164px] sm:h-[376px]">
                 <HeroFloaters cards={[...featured, ...trending, ...recent]} />
             </div>
 
@@ -78,7 +79,10 @@ export default function Home({
                             : 'The Telegram builder directory'}
                         {counts.visitors > 0 && (
                             <>
-                                <span aria-hidden="true" className="text-border">
+                                <span
+                                    aria-hidden="true"
+                                    className="text-border"
+                                >
                                     ·
                                 </span>
                                 <span className="tabular">

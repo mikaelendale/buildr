@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils';
 
 const SIZES = {
-    xl: 'text-[38px] leading-[1.08] sm:text-[52px]',
+    // Scales down on narrow phones so the headline keeps its two lines.
+    xl: 'text-[clamp(32px,9.75vw,38px)] leading-[1.08] sm:text-[52px]',
     lg: 'text-[30px] leading-[1.12] sm:text-[40px]',
     md: 'text-[24px] leading-[1.2] sm:text-[28px]',
     sm: 'text-[20px] leading-[1.25]',

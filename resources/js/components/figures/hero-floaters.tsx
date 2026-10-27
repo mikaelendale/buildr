@@ -6,19 +6,22 @@ import type { ProfileCard } from '@/types';
  * Real profile pictures drifting in the hero's dither field: plain photos
  * (never dithered) in white-ringed circles, parked on the right so they
  * never sit under the headline. Each one floats on its own slow rhythm and
- * names itself on hover. Reduced motion keeps them still.
+ * names itself on hover. Reduced motion keeps them still. Phones get their
+ * own spots across the band above the headline, and the band clips
+ * sideways so nothing (not even a hidden name) widens the page.
  */
 
 // Hand-placed spots (percent of the band) and sizes; first ones are largest.
+// px/py place the first four on phones, inside the edges at 320px.
 const SPOTS = [
-    { x: 70, y: 42, size: 76, delay: 0 },
-    { x: 86, y: 26, size: 60, delay: 1.2 },
-    { x: 79, y: 70, size: 52, delay: 2.1 },
-    { x: 93, y: 56, size: 64, delay: 0.6 },
-    { x: 62, y: 20, size: 44, delay: 1.7 },
-    { x: 96, y: 14, size: 40, delay: 2.6 },
-    { x: 60, y: 66, size: 40, delay: 3.1 },
-    { x: 89, y: 84, size: 36, delay: 1.4 },
+    { x: 70, y: 42, px: 62, py: 60, size: 76, delay: 0 },
+    { x: 86, y: 26, px: 82, py: 28, size: 60, delay: 1.2 },
+    { x: 79, y: 70, px: 86, py: 78, size: 52, delay: 2.1 },
+    { x: 93, y: 56, px: 40, py: 30, size: 64, delay: 0.6 },
+    { x: 62, y: 20, px: 0, py: 0, size: 44, delay: 1.7 },
+    { x: 92, y: 14, px: 0, py: 0, size: 40, delay: 2.6 },
+    { x: 60, y: 66, px: 0, py: 0, size: 40, delay: 3.1 },
+    { x: 89, y: 84, px: 0, py: 0, size: 36, delay: 1.4 },
 ];
 
 export default function HeroFloaters({
@@ -38,7 +41,12 @@ export default function HeroFloaters({
     }
 
     return (
-        <div className={cn('pointer-events-none absolute inset-0', className)}>
+        <div
+            className={cn(
+                'pointer-events-none absolute inset-0 overflow-x-clip',
+                className,
+            )}
+        >
             {people.map((card, i) => {
                 const spot = SPOTS[i];
 
@@ -48,11 +56,18 @@ export default function HeroFloaters({
                         href={card.url}
                         aria-label={card.name}
                         className={cn(
-                            'group pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 outline-none',
+                            'group pointer-events-auto absolute top-(--py) left-(--px) -translate-x-1/2 -translate-y-1/2 outline-none sm:top-(--y) sm:left-(--x)',
                             // Phones keep the four biggest, a bit smaller.
                             i >= 4 && 'hidden md:block',
                         )}
-                        style={{ left: `${spot.x}%`, top: `${spot.y}%` }}
+                        style={
+                            {
+                                '--x': `${spot.x}%`,
+                                '--y': `${spot.y}%`,
+                                '--px': `${spot.px}%`,
+                                '--py': `${spot.py}%`,
+                            } as React.CSSProperties
+                        }
                     >
                         <span
                             className="block motion-safe:animate-[float-y_7s_ease-in-out_infinite]"
