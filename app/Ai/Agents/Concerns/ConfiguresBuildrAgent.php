@@ -9,7 +9,7 @@ use Laravel\Ai\Enums\Lab;
 
 /**
  * Shared knobs for every Buildr agent, per provider: how hard it thinks
- * (Anthropic effort, Groq reasoning effort, Gemini thinking level), output
+ * (OpenAI and Groq reasoning effort, Anthropic effort, Gemini thinking level), output
  * caps, and the server-side refusal fallback on the models that support it.
  * Agents expose `$model` and `$effort`.
  */
@@ -54,6 +54,17 @@ trait ConfiguresBuildrAgent
             ]);
         }
 
+        // OpenAI (Responses API): the output cap (reasoning counts against it
+        // and bills as output) and how hard the model thinks. Labelling,
+        // digests and descriptions need none; the writer, the fact-checker
+        // and the project resolver weigh evidence, so a little.
+        if ($provider === 'openai') {
+            return array_filter([
+                'max_output_tokens' => $this->outputTokenBudget(),
+                'reasoning' => self::openAiReasoning($this->model, in_array(class_basename($this), ['ProfileWriter', 'ClaimChecker', 'ProjectResolver'], true)),
+            ]);
+        }
+
         if ($provider !== 'anthropic') {
             return [];
         }
@@ -66,6 +77,26 @@ trait ConfiguresBuildrAgent
         }
 
         return $options;
+    }
+
+    /**
+     * Reasoning effort for an OpenAI model, or null for models that don't
+     * reason (gpt-4.1, gpt-4o). The lowest setting differs by generation:
+     * gpt-5, -mini and -nano take "minimal", gpt-5.1 and later take "none".
+     *
+     * @return array{effort: string}|null
+     */
+    public static function openAiReasoning(string $model, bool $weighsEvidence): ?array
+    {
+        if (preg_match('/^(gpt-5|o\d)/', $model) !== 1 || str_contains($model, '-chat')) {
+            return null;
+        }
+
+        if ($weighsEvidence) {
+            return ['effort' => 'low'];
+        }
+
+        return ['effort' => preg_match('/^gpt-5(-mini|-nano)?(-\d{4}-\d{2}-\d{2})?$/', $model) === 1 ? 'minimal' : 'none'];
     }
 
     /**

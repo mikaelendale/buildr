@@ -64,11 +64,12 @@ Without a worker on the `scrape`, `ai` and `media` queues, onboarding waits at "
 
 Everything goes through the Laravel AI SDK; pick one in `.env` (all the options are in `.env.example`):
 
-- **Anthropic** (default): `ANTHROPIC_API_KEY`.
-- **Groq's free tier**: the Groq block, with `BUILDR_AI_BUDGET_PROFILE=compact` so calls are trimmed and paced to its 8K tokens a minute (an 80-post channel takes about 10 minutes and well under a cent).
+- **OpenAI** (default): `OPENAI_API_KEY`. `gpt-5-nano` labels posts and writes month digests with minimal reasoning; `gpt-5.6-luna` writes, matches projects and fact-checks with a little. A channel of about 100 posts takes around two minutes and roughly a cent.
+- **Anthropic**: `ANTHROPIC_API_KEY` and the Claude models (commented in `.env.example`).
+- **Groq's free tier**: the Groq block, with `BUILDR_AI_BUDGET_PROFILE=compact` so calls are trimmed and paced to its 8K tokens a minute.
 - **Several free tiers in rotation**: `BUILDR_AI_LANES=gemini,groq` with both keys; when one runs out, the next takes over. Lane settings live in `config/buildr.php`.
 
-`BUILDR_AI_DAILY_BUDGET_USD` caps spend; the admin panel's AI costs page shows usage and can pause AI.
+Every call is logged with its tokens and an estimated cost from the price table in `config/buildr.php` (cached input and reasoning tokens included; unknown models are priced high on purpose). `BUILDR_AI_DAILY_BUDGET_USD` caps spend per day; the admin panel's AI costs page shows usage and can pause AI.
 
 ### Telegram bot
 

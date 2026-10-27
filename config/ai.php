@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'default' => env('AI_DEFAULT_PROVIDER', 'anthropic'),
+    'default' => env('AI_DEFAULT_PROVIDER', 'openai'),
     'default_for_images' => 'gemini',
     'default_for_audio' => 'openai',
     'default_for_transcription' => 'openai',
@@ -133,7 +133,8 @@ return [
             'driver' => 'openai',
             'key' => env('OPENAI_API_KEY'),
             'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
-            'store' => env('OPENAI_STORE', true),
+            // Don't keep prompts (channel posts) on OpenAI's side.
+            'store' => env('OPENAI_STORE', false),
         ],
 
         'openai-compatible' => [
