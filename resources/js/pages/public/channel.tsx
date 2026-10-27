@@ -108,7 +108,11 @@ export default function ChannelPage({
         <>
             <Seo seo={seo} />
 
-            <ProfileCover seedKey={channel.username} avatar={channel.avatar} />
+            <ProfileCover
+                seedKey={channel.username}
+                tone={channel.card.color}
+                avatar={channel.avatar}
+            />
 
             <article className="relative mx-auto max-w-[880px] px-5 pt-16 sm:pt-24">
                 <div className="flex flex-wrap items-center gap-2">
@@ -204,6 +208,7 @@ export default function ChannelPage({
                                     id={channel.id}
                                     profileUrl={channel.url}
                                     name={channel.name}
+                                    card={channel.card}
                                     own={isOwner}
                                     fresh={isOwner}
                                 />

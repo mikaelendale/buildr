@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\CreatorLoginController;
+use App\Http\Controllers\Creator\CardStyleController;
 use App\Http\Controllers\Creator\ChannelController;
 use App\Http\Controllers\Creator\ClaimController;
 use App\Http\Controllers\Creator\DashboardController;
@@ -85,6 +86,8 @@ Route::middleware(['auth', 'role:creator'])->group(function () {
         Route::post('channels/{channel}/rename', [ChannelController::class, 'rename'])->name('channels.rename');
         Route::put('channels/{channel}/page', [ChannelController::class, 'page'])->name('channels.page');
         Route::delete('channels/{channel}', [ChannelController::class, 'destroy'])->name('channels.destroy');
+
+        Route::put('share-card/{type}/{id}', CardStyleController::class)->whereNumber('id')->middleware('throttle:30,1')->name('share-card.style');
 
         Route::get('settings', [SettingsController::class, 'edit'])->name('settings');
         Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');

@@ -174,6 +174,8 @@ export type CreatorProfile = {
     updated_at: string | null;
     published_at: string | null;
     og_image: string;
+    /** The owner's share card look; its color also tones the cover. */
+    card: CardLook;
 };
 
 export type ChannelProfile = {
@@ -198,7 +200,14 @@ export type ChannelProfile = {
     sections: ChannelSection[];
     published_at: string | null;
     og_image: string;
+    card: CardLook;
 };
+
+export type CardTheme = 'light' | 'dark' | 'color';
+
+export type CardColor = 'mint' | 'sky' | 'violet' | 'amber' | 'rose' | 'ink';
+
+export type CardLook = { theme: CardTheme; color: CardColor };
 
 export type Seo = {
     title: string;

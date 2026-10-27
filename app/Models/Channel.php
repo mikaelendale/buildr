@@ -52,6 +52,8 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
  * @property string|null $timezone
  * @property int $failure_count
  * @property string|null $last_error
+ * @property string|null $card_theme
+ * @property string|null $card_color
  * @property CarbonImmutable|null $next_retry_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -65,7 +67,7 @@ class Channel extends Model
     /**
      * Owner page settings, reset whenever the channel changes hands.
      */
-    public const PAGE_DEFAULTS = ['slug' => null, 'page_visible' => true, 'show_owner' => true];
+    public const PAGE_DEFAULTS = ['slug' => null, 'page_visible' => true, 'show_owner' => true, 'card_theme' => null, 'card_color' => null];
 
     /**
      * @var array<string, mixed>

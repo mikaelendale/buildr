@@ -134,7 +134,11 @@ export default function CreatorPage({
         <>
             <Seo seo={seo} />
 
-            <ProfileCover seedKey={profile.slug} avatar={profile.avatar} />
+            <ProfileCover
+                seedKey={profile.slug}
+                tone={profile.card.color}
+                avatar={profile.avatar}
+            />
 
             <article className="relative mx-auto max-w-[880px] px-5 pt-16 sm:pt-24">
                 <div className="flex flex-wrap items-center gap-2">
@@ -204,6 +208,7 @@ export default function CreatorPage({
                                 id={profile.id}
                                 profileUrl={profile.url}
                                 name={profile.name}
+                                card={profile.card}
                                 own={isOwner}
                                 fresh={isOwner}
                             />

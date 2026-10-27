@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Claim;
 use App\Models\ProfileView;
 use App\Services\Creators\OnboardingProgress;
+use App\Services\Og\CardStyle;
 use App\Services\Profiles\ProfilePageBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -50,6 +51,7 @@ class DashboardController extends Controller
                 'pending_changes' => $creator->pending_changes,
                 'onboarding_step' => $creator->onboarding_step,
                 'published_at' => $creator->published_at?->toIso8601String(),
+                'card' => CardStyle::for($creator)->toArray(),
             ],
             'channels' => $channels->map(fn ($c) => $pages->channelChip($c, $c->id === $creator->primary_channel_id) + [
                 'last_scraped_at' => $c->last_scraped_at?->toIso8601String(),

@@ -14,8 +14,12 @@ const SHAPES = ['simplex', 'warp', 'swirl', 'ripple'] as const;
 /**
  * A profile's dither identity: tone and pattern derived from the username,
  * shared by the profile cover, the creator dashboard and the share card.
+ * The owner can pick another tone (their share card color).
  */
-export function ditherIdentity(seedKey: string): {
+export function ditherIdentity(
+    seedKey: string,
+    picked?: DitherTone | null,
+): {
     seed: number;
     tone: DitherTone;
     shape: (typeof SHAPES)[number];
@@ -24,7 +28,7 @@ export function ditherIdentity(seedKey: string): {
 
     return {
         seed,
-        tone: TONES[seed % TONES.length],
+        tone: picked ?? TONES[seed % TONES.length],
         shape: SHAPES[seed % SHAPES.length],
     };
 }
@@ -42,6 +46,7 @@ const PORTRAIT: Record<
     violet: { light: ['#6a4bdc', '#c6b5f8'], dark: ['#8f72f2', '#d7cbfb'] },
     amber: { light: ['#b26b0e', '#f3cf86'], dark: ['#e8a94a', '#f8dfae'] },
     rose: { light: ['#c2335f', '#f6b3c6'], dark: ['#ec7a9c', '#fad0dc'] },
+    ink: { light: ['#1c1c1a', '#c4c4bd'], dark: ['#e6e6e2', '#8a8a84'] },
 };
 
 /**
@@ -55,7 +60,9 @@ function sameOrigin(src: string): string {
 
     const url = new URL(src, window.location.href);
 
-    return url.origin === window.location.origin ? src : `/media${url.pathname}`;
+    return url.origin === window.location.origin
+        ? src
+        : `/media${url.pathname}`;
 }
 
 // A soft vignette: fades toward the content (left), the page edge (right),
@@ -71,18 +78,20 @@ const PORTRAIT_MASK =
  */
 export function PortraitDither({
     seedKey,
+    tone: picked,
     avatar,
     className,
     style,
     size = 3,
 }: {
     seedKey: string;
+    tone?: DitherTone | null;
     avatar?: string | null;
     className?: string;
     style?: React.CSSProperties;
     size?: number;
 }) {
-    const { seed, tone, shape } = ditherIdentity(seedKey);
+    const { seed, tone, shape } = ditherIdentity(seedKey, picked);
     const dark = useDarkMode();
     const [mounted, setMounted] = useState(false);
     const [failed, setFailed] = useState(false);
@@ -152,13 +161,16 @@ export function PortraitDither({
  */
 export default function ProfileCover({
     seedKey,
+    tone: picked,
     avatar,
 }: {
     seedKey: string;
+    /** The owner's share card color, when they picked one. */
+    tone?: DitherTone | null;
     avatar?: string | null;
 }) {
     if (!avatar) {
-        const { seed, tone, shape } = ditherIdentity(seedKey);
+        const { seed, tone, shape } = ditherIdentity(seedKey, picked);
 
         return (
             <DitherField
@@ -181,6 +193,7 @@ export default function ProfileCover({
         >
             <PortraitDither
                 seedKey={seedKey}
+                tone={picked}
                 avatar={avatar}
                 className="absolute top-0 right-0 h-full w-[88vw] overflow-hidden opacity-60 sm:right-[max(0px,calc((100vw-1080px)/2))] sm:w-[min(640px,62vw)] sm:opacity-100"
                 style={{

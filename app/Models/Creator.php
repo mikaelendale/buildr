@@ -36,6 +36,8 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
  * @property CarbonImmutable|null $published_at
  * @property CarbonImmutable|null $slug_changed_at
  * @property string|null $timezone
+ * @property string|null $card_theme
+ * @property string|null $card_color
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */

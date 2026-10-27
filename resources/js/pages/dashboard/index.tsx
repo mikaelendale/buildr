@@ -10,13 +10,15 @@ import type { GlyphName } from '@/components/figures/glyph';
 import PageContainer from '@/components/page-container';
 import ChannelChips from '@/components/profile/channel-chips';
 import { PortraitDither } from '@/components/profile/profile-cover';
-import ShareCardDialog from '@/components/profile/share-card-dialog';
+import ShareCardDialog, {
+    shareCardSrc,
+} from '@/components/profile/share-card-dialog';
 import { StatPanel } from '@/components/profile/stat-cards';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { ChannelChip } from '@/types';
+import type { CardLook, ChannelChip } from '@/types';
 
 type Props = {
     creator: {
@@ -36,6 +38,7 @@ type Props = {
         pending_changes: Record<string, string | null> | null;
         onboarding_step: number;
         published_at: string | null;
+        card: CardLook;
     };
     channels: (ChannelChip & {
         scrape_status: string;
@@ -183,6 +186,7 @@ export default function Dashboard({
             <div className="surface relative flex min-h-[132px] flex-col gap-4 overflow-hidden p-5 sm:flex-row sm:items-center">
                 <PortraitDither
                     seedKey={creator.slug}
+                    tone={creator.card.color}
                     avatar={creator.avatar}
                     size={2.5}
                     className="pointer-events-none absolute inset-y-0 right-0 w-3/5 overflow-hidden opacity-60 sm:w-1/2 sm:opacity-100"
@@ -496,6 +500,7 @@ export default function Dashboard({
                         id={creator.id}
                         profileUrl={creator.url}
                         name={creator.name}
+                        card={creator.card}
                         own
                         fresh
                         trigger={
@@ -505,7 +510,11 @@ export default function Dashboard({
                                 aria-label="Open your share card"
                             >
                                 <img
-                                    src={`/share-card/creator/${creator.id}.png`}
+                                    src={shareCardSrc(
+                                        'creator',
+                                        creator.id,
+                                        creator.card,
+                                    )}
                                     alt=""
                                     loading="lazy"
                                     className="aspect-[1200/630] w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
@@ -528,6 +537,7 @@ export default function Dashboard({
                             id={creator.id}
                             profileUrl={creator.url}
                             name={creator.name}
+                            card={creator.card}
                             own
                             fresh
                             trigger={

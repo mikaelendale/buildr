@@ -4,6 +4,7 @@ namespace App\Services\Profiles;
 
 use App\Enums\ChannelAvailability;
 use App\Enums\ChannelClaimStatus;
+use App\Enums\ProjectStatus;
 use App\Models\Channel;
 use App\Models\Creator;
 use App\Models\CreatorSocial;
@@ -12,6 +13,7 @@ use App\Models\PostExtraction;
 use App\Models\Project;
 use App\Models\Summary;
 use App\Services\Media\AvatarStorer;
+use App\Services\Og\CardStyle;
 use App\Services\Og\OgImageRenderer;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -76,6 +78,7 @@ class ProfilePageBuilder
             'updated_at' => $updated?->toIso8601String(),
             'published_at' => $creator->published_at?->toIso8601String(),
             'og_image' => $this->ogImageUrl('creator', $creator->id),
+            'card' => CardStyle::for($creator)->toArray(),
         ];
     }
 
@@ -128,6 +131,7 @@ class ProfilePageBuilder
             'sections' => [$this->section($channel)],
             'published_at' => $channel->published_at?->toIso8601String(),
             'og_image' => $this->ogImageUrl('channel', $channel->id),
+            'card' => CardStyle::for($channel)->toArray(),
         ];
     }
 
@@ -170,8 +174,10 @@ class ProfilePageBuilder
                 'posting_label' => $stats['posting_label'] ?? null,
                 'peak_hour' => $stats['peak_hour'] ?? null,
                 'language_mix' => $stats['language_mix'] ?? null,
-                'projects_shipped' => $stats['projects_shipped'] ?? null,
-                'projects_count' => $stats['projects_count'] ?? null,
+                // Live, not from the stats snapshot: creators add, hide and
+                // relabel projects long after the pipeline last ran.
+                'projects_shipped' => $projects->where('status', ProjectStatus::Launched)->count(),
+                'projects_count' => $projects->count(),
                 'total_posts' => $stats['total_posts'] ?? null,
                 'top_emoji' => $stats['top_emoji'] ?? null,
                 'weekly_activity' => is_array($stats['weekly_activity'] ?? null) ? array_values(array_map('intval', $stats['weekly_activity'])) : null,

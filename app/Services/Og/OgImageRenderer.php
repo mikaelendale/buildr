@@ -2,6 +2,7 @@
 
 namespace App\Services\Og;
 
+use App\Enums\ProjectStatus;
 use App\Models\Channel;
 use App\Models\Creator;
 use App\Services\Profiles\SummaryPresenter;
@@ -21,11 +22,13 @@ use Throwable;
 
 /**
  * 1200×630 share card per profile/channel (plan §11), also the og:image.
- * A white card on the warm canvas: on the left the person's avatar as an
- * ordered-dither (Bayer 8×8) halftone in their tone, the same identity the
- * profile cover uses; on the right name, handle, hook, a few real stats and
- * the profile URL. Stored on the public disk, regenerated on publish /
- * summary change, rendered on demand when missing.
+ * A card on a canvas: on the left the person's avatar as an ordered-dither
+ * (Bayer 8×8) halftone in their color, the same identity the profile cover
+ * uses; on the right the logo, name, handle, hook, a few real stats and the
+ * profile URL. The card is light, dark or solid color (CardStyle), and the
+ * portrait, logo, badge and link follow the chosen color. The owner's look
+ * lives at path(), other looks at variantPath(). Stored on the public disk,
+ * regenerated on publish / summary change, rendered on demand.
  */
 class OgImageRenderer
 {
@@ -48,13 +51,44 @@ class OgImageRenderer
     /** Same order as TONES in resources/js/components/figures/dither-field.tsx. */
     private const TONES = ['mint', 'sky', 'violet', 'amber', 'rose'];
 
-    /** [paper, highlight, ink] per tone, matching the profile cover. */
+    /** Light card: [paper, highlight, ink] per color, matching the profile cover. */
     private const PALETTES = [
         'mint' => ['#e9f8f2', '#8fe3c9', '#1f9a7a'],
         'sky' => ['#ebf2fd', '#a9cbf8', '#2f6fd6'],
         'violet' => ['#f1ecfd', '#c6b5f8', '#6a4bdc'],
         'amber' => ['#fdf4e3', '#f3cf86', '#b26b0e'],
         'rose' => ['#fdeef2', '#f6b3c6', '#c2335f'],
+        'ink' => ['#f1f1ee', '#c4c4bd', '#1c1c1a'],
+    ];
+
+    /** Dark card: [shadow, mid, glow] per color; highlights print bright. */
+    private const DARK = [
+        'mint' => ['#132621', '#2b9b7c', '#b4f5df'],
+        'sky' => ['#121d31', '#3d7ddb', '#c7dcfb'],
+        'violet' => ['#1b1631', '#7556e4', '#d7cbfb'],
+        'amber' => ['#271c0c', '#c4862a', '#f8dfae'],
+        'rose' => ['#2a121b', '#cf4c77', '#fad0dc'],
+        'ink' => ['#242422', '#6c6c66', '#ecece8'],
+    ];
+
+    /** Solid card per color, deep enough for white type (5:1 or better). */
+    private const SOLID = [
+        'mint' => '#13785e',
+        'sky' => '#2a5ec2',
+        'violet' => '#5a3fcb',
+        'amber' => '#95580b',
+        'rose' => '#ad2a54',
+        'ink' => '#151514',
+    ];
+
+    /** The logo's dot per color; mint and ink keep the brand's own. */
+    private const DOTS = [
+        'mint' => self::ACCENT,
+        'sky' => '#5b98ef',
+        'violet' => '#9a7cf0',
+        'amber' => '#e3a032',
+        'rose' => '#ec6a91',
+        'ink' => self::ACCENT,
     ];
 
     private const BAYER = [
@@ -77,9 +111,32 @@ class OgImageRenderer
 
     public function __construct(private readonly SummaryPresenter $presenter) {}
 
+    /**
+     * The owner's look: the og:image and the default share card.
+     */
     public static function path(string $type, int $id): string
     {
         return "og/{$type}/{$id}.png";
+    }
+
+    /**
+     * Any other look, rendered when someone picks it.
+     */
+    public static function variantPath(string $type, int $id, CardStyle $style): string
+    {
+        return "og/{$type}/{$id}/{$style->key()}.png";
+    }
+
+    /**
+     * Where a look of this card is stored: the owner's own at path().
+     */
+    public static function pathFor(Creator|Channel $model, CardStyle $style): string
+    {
+        $type = $model instanceof Creator ? 'creator' : 'channel';
+
+        return $style->is(CardStyle::for($model))
+            ? self::path($type, $model->id)
+            : self::variantPath($type, $model->id, $style);
     }
 
     /**
@@ -103,19 +160,21 @@ class OgImageRenderer
 
     /**
      * Every channel has its own card; a claimed one gets the verified badge.
+     * Without a style it renders the owner's look.
      */
-    public function renderForChannel(Channel $channel): ?string
+    public function renderForChannel(Channel $channel, ?CardStyle $style = null): ?string
     {
         $owner = $channel->showsOwner() ? $channel->creator : null;
+        $style ??= CardStyle::for($channel);
 
         return $this->render(
-            self::path('channel', $channel->id),
+            self::pathFor($channel, $style),
             $channel->displayTitle(),
             Str::limit('@'.$channel->username, 38),
             $this->presenter->hook($channel) ?? $channel->description,
             $this->facts($channel, $channel->subscribers),
             $channel->avatar_path ?? $owner?->avatar_path,
-            self::tone($channel->username),
+            $style,
             $channel->publicUrl(),
             $channel->isClaimed(),
         );
@@ -134,18 +193,19 @@ class OgImageRenderer
         }
     }
 
-    public function renderForCreator(Creator $creator): ?string
+    public function renderForCreator(Creator $creator, ?CardStyle $style = null): ?string
     {
         $header = $creator->headerChannel();
+        $style ??= CardStyle::for($creator);
 
         return $this->render(
-            self::path('creator', $creator->id),
+            self::pathFor($creator, $style),
             $creator->display_name,
             $header !== null ? '@'.$header->username : null,
             ($header !== null ? $this->presenter->hook($header) : null) ?? $creator->bio ?? $header?->description,
             $this->facts($header, (int) $creator->channels->sum('subscribers') ?: null),
             $creator->avatar_path ?? $header?->avatar_path,
-            self::tone($creator->slug),
+            $style,
             url('/'.$creator->slug),
             true,
         );
@@ -180,7 +240,7 @@ class OgImageRenderer
             $facts[] = ["{$longest} wk", 'best streak'];
         }
 
-        $shipped = (int) ($stats['projects_shipped'] ?? 0);
+        $shipped = $channel?->projects()->visible()->where('status', ProjectStatus::Launched)->count() ?? 0;
 
         if ($shipped > 0) {
             $facts[] = [(string) $shipped, $shipped === 1 ? 'project shipped' : 'projects shipped'];
@@ -192,25 +252,24 @@ class OgImageRenderer
     /**
      * @param  array<int, array{0: string, 1: string}>  $facts
      */
-    public function render(string $path, string $name, ?string $handle, ?string $hook, array $facts, ?string $avatarPath, string $tone, string $url, bool $verified): ?string
+    public function render(string $path, string $name, ?string $handle, ?string $hook, array $facts, ?string $avatarPath, CardStyle $style, string $url, bool $verified): ?string
     {
         try {
             $manager = new ImageManager(new Driver);
-            $image = $manager->decodeBinary($this->background());
+            $scheme = $this->scheme($style);
+            $image = $manager->decodeBinary($this->background($scheme));
 
-            $palette = self::PALETTES[$tone] ?? self::PALETTES['mint'];
             $avatar = $avatarPath !== null && Storage::disk('public')->exists($avatarPath)
                 ? (string) Storage::disk('public')->get($avatarPath)
                 : null;
 
-            $image->insert($manager->decodeBinary($this->portrait($avatar, $palette, $tone)), 72, 65);
+            $image->insert($manager->decodeBinary($this->portrait($avatar, $scheme['inks'], $scheme['glow'], $style->color)), 72, 65);
 
             $x = 584;
-            $ink = $palette[2];
 
             // Brand row: the logo tile + wordmark.
-            $image->insert($manager->decodeBinary($this->logoMark(40)), $x, 86);
-            $this->text($image, (string) config('app.name', 'Buildr'), $x + 52, 116, 26, bold: true);
+            $image->insert($manager->decodeBinary($this->logoMark(40, $scheme)), $x, 86);
+            $this->text($image, (string) config('app.name', 'Buildr'), $x + 52, 116, 26, bold: true, color: $scheme['text']);
 
             // Name, shrunk to fit the column, then the verified badge in their tone.
             $name = Str::limit($this->clean($name), 22);
@@ -221,24 +280,24 @@ class OgImageRenderer
                 $size -= 2;
             }
 
-            $this->text($image, $name, $x, 206, $size, bold: true);
+            $this->text($image, $name, $x, 206, $size, bold: true, color: $scheme['text']);
 
             if ($verified) {
-                $image->insert($manager->decodeBinary($this->badge(38, $ink)), $x + $this->textWidth($name, $size, bold: true) + 12, 206 - (int) round($size * 0.72) - 1);
+                $image->insert($manager->decodeBinary($this->badge(38, $scheme['badge'], $scheme['check'])), $x + $this->textWidth($name, $size, bold: true) + 12, 206 - (int) round($size * 0.72) - 1);
             }
 
             if ($handle !== null) {
-                $this->text($image, $handle, $x, 246, 26, color: self::MUTED);
+                $this->text($image, $handle, $x, 246, 26, color: $scheme['muted']);
             }
 
             if ($hook !== null && trim($hook) !== '') {
-                $this->text($image, Str::limit($this->clean($hook), 120), $x, 276, 29, wrap: 540, lineHeight: 1.55, valign: 'top');
+                $this->text($image, Str::limit($this->clean($hook), 120), $x, 276, 29, color: $scheme['text'], wrap: 540, lineHeight: 1.55, valign: 'top');
             }
 
             foreach ($facts as $i => [$value, $label]) {
                 $fx = $x + $i * 186;
-                $this->text($image, $value, $fx, 476, 36, bold: true);
-                $this->text($image, $label, $fx, 506, 20, color: self::MUTED);
+                $this->text($image, $value, $fx, 476, 36, bold: true, color: $scheme['text']);
+                $this->text($image, $label, $fx, 506, 20, color: $scheme['muted']);
             }
 
             // The link, shrunk to the column; a very long one falls back to the bare domain.
@@ -254,7 +313,7 @@ class OgImageRenderer
                 $size = 24;
             }
 
-            $this->text($image, $link, $x, 562, $size, bold: true, color: $ink);
+            $this->text($image, $link, $x, 562, $size, bold: true, color: $scheme['link']);
 
             Storage::disk('public')->put($path, (string) $image->encode(new PngEncoder));
 
@@ -267,17 +326,88 @@ class OgImageRenderer
     }
 
     /**
-     * Canvas + rounded white card, drawn at 2× and downsampled so the
-     * corners are smooth (GD shapes are not antialiased).
+     * Every color on the card for one look. Light is the site's white card
+     * on the warm canvas; dark is the same in dark mode; color fills the
+     * card with the color, on a canvas of its palest tint, with white type
+     * and a white logo tile.
+     *
+     * @return array{canvas: string, card: string, line: string, text: string, muted: string, link: string, inks: array{0: string, 1: string, 2: string}, glow: bool, tile: string, tileLine: string, mark: string, dot: string, badge: string, check: string}
      */
-    private function background(): string
+    private function scheme(CardStyle $style): array
+    {
+        $color = $style->color;
+        $dot = self::DOTS[$color];
+
+        return match ($style->theme) {
+            'dark' => [
+                'canvas' => '#0e0e0d',
+                'card' => '#1a1a18',
+                'line' => '#2b2b28',
+                'text' => '#f2f2ef',
+                'muted' => '#9b9b94',
+                'link' => self::DARK[$color][2],
+                'inks' => self::DARK[$color],
+                'glow' => true,
+                'tile' => '#262624',
+                'tileLine' => '#363632',
+                'mark' => '#f2f2ef',
+                'dot' => $dot,
+                'badge' => self::DARK[$color][1],
+                'check' => '#ffffff',
+            ],
+            'color' => [
+                'canvas' => self::PALETTES[$color][0],
+                'card' => self::SOLID[$color],
+                'line' => self::SOLID[$color],
+                'text' => '#ffffff',
+                'muted' => $this->mix('#ffffff', self::SOLID[$color], 0.28),
+                'link' => '#ffffff',
+                'inks' => [
+                    $this->mix(self::SOLID[$color], '#000000', 0.3),
+                    $this->mix(self::SOLID[$color], '#ffffff', 0.4),
+                    $this->mix(self::SOLID[$color], '#ffffff', 0.88),
+                ],
+                'glow' => true,
+                'tile' => self::CARD,
+                'tileLine' => self::CARD,
+                'mark' => self::SOLID[$color],
+                'dot' => $dot,
+                'badge' => '#ffffff',
+                'check' => self::SOLID[$color],
+            ],
+            default => [
+                'canvas' => self::BG,
+                'card' => self::CARD,
+                'line' => self::LINE,
+                'text' => self::TEXT,
+                'muted' => self::MUTED,
+                'link' => self::PALETTES[$color][2],
+                'inks' => self::PALETTES[$color],
+                'glow' => false,
+                'tile' => self::CARD,
+                'tileLine' => self::LINE,
+                'mark' => self::TEXT,
+                'dot' => $dot,
+                'badge' => self::PALETTES[$color][2],
+                'check' => '#ffffff',
+            ],
+        };
+    }
+
+    /**
+     * Canvas + rounded card, drawn at 2× and downsampled so the corners are
+     * smooth (GD shapes are not antialiased).
+     *
+     * @param  array{canvas: string, card: string, line: string}  $scheme
+     */
+    private function background(array $scheme): string
     {
         $scale = 2;
-        $big = $this->canvas(self::WIDTH * $scale, self::HEIGHT * $scale, self::BG);
-        $this->roundedRect($big, 32 * $scale, 32 * $scale, (self::WIDTH - 64) * $scale, (self::HEIGHT - 64) * $scale, 34 * $scale, self::LINE);
-        $this->roundedRect($big, 34 * $scale, 34 * $scale, (self::WIDTH - 68) * $scale, (self::HEIGHT - 68) * $scale, 32 * $scale, self::CARD);
+        $big = $this->canvas(self::WIDTH * $scale, self::HEIGHT * $scale, $scheme['canvas']);
+        $this->roundedRect($big, 32 * $scale, 32 * $scale, (self::WIDTH - 64) * $scale, (self::HEIGHT - 64) * $scale, 34 * $scale, $scheme['line']);
+        $this->roundedRect($big, 34 * $scale, 34 * $scale, (self::WIDTH - 68) * $scale, (self::HEIGHT - 68) * $scale, 32 * $scale, $scheme['card']);
 
-        $out = $this->canvas(self::WIDTH, self::HEIGHT, self::BG);
+        $out = $this->canvas(self::WIDTH, self::HEIGHT, $scheme['canvas']);
         imagecopyresampled($out, $big, 0, 0, 0, 0, self::WIDTH, self::HEIGHT, self::WIDTH * $scale, self::HEIGHT * $scale);
 
         return $this->png($out);
@@ -285,18 +415,19 @@ class OgImageRenderer
 
     /**
      * The halftone portrait: avatar → luminance (contrast-stretched) →
-     * Bayer 8×8 into three inks (paper, highlight, ink) → 5px cells, with
-     * the dark parts printed so it reads like ink on paper. No avatar: a
-     * seeded wave field in the same inks.
+     * Bayer 8×8 into three inks → 4px cells. On a light card the dark parts
+     * print (paper, highlight, ink) so it reads like ink on paper; with
+     * $glow the bright parts do (shadow, mid, glow) so it lights up a dark
+     * or colored card. No avatar: a seeded wave field in the same inks.
      *
      * @param  array{0: string, 1: string, 2: string}  $palette
      */
-    private function portrait(?string $avatar, array $palette, string $tone): string
+    private function portrait(?string $avatar, array $palette, bool $glow, string $seed): string
     {
         $w = self::GRID_W;
         $h = self::GRID_H;
         $levels = $this->luminance($avatar, $w, $h)
-            ?? $this->field($w, $h, crc32($tone));
+            ?? $this->field($w, $h, crc32($seed));
 
         $inks = array_map(fn (string $hex) => $this->rgb($hex), $palette);
         $out = $this->newImage($w * self::CELL, $h * self::CELL);
@@ -306,8 +437,8 @@ class OgImageRenderer
 
         for ($y = 0; $y < $h; $y++) {
             for ($x = 0; $x < $w; $x++) {
-                // Darkness 0..1 spread over three inks with an ordered threshold.
-                $scaled = (1 - $levels[$y][$x]) * 2;
+                // Darkness (glowing: brightness) 0..1 spread over three inks with an ordered threshold.
+                $scaled = ($glow ? $levels[$y][$x] : 1 - $levels[$y][$x]) * 2;
                 $base = (int) floor($scaled);
                 $step = $base + (($scaled - $base) > (self::BAYER[$y % 8][$x % 8] + 0.5) / 64 ? 1 : 0);
                 $color = $colors[min(2, max(0, $step))];
@@ -394,36 +525,39 @@ class OgImageRenderer
 
     /**
      * The site's logo tile (resources/js/components/brand/logo.tsx), drawn at
-     * 4x and downsampled: white rounded tile, ink "b", one mint dot.
+     * 4x and downsampled: rounded tile, a "b" and one dot in the look's
+     * colors (white tile, ink "b", mint dot on the default card).
+     *
+     * @param  array{tile: string, tileLine: string, mark: string, dot: string}  $scheme
      */
-    private function logoMark(int $size): string
+    private function logoMark(int $size, array $scheme): string
     {
         $k = $size * 4 / 32;
         $tile = (int) round(32 * $k);
         $img = $this->transparent($tile);
 
-        $this->roundedRect($img, 0, 0, $tile, $tile, (int) round(9.5 * $k), self::LINE);
-        $this->roundedRect($img, (int) round($k), (int) round($k), (int) round(30 * $k), (int) round(30 * $k), (int) round(8.5 * $k), self::CARD);
+        $this->roundedRect($img, 0, 0, $tile, $tile, (int) round(9.5 * $k), $scheme['tileLine']);
+        $this->roundedRect($img, (int) round($k), (int) round($k), (int) round(30 * $k), (int) round(30 * $k), (int) round(8.5 * $k), $scheme['tile']);
 
         // Stem of the "b" with round caps.
         $half = 1.3 * $k;
-        $this->disc($img, 11.2 * $k, 7.8 * $k, $half, self::TEXT);
-        $this->disc($img, 11.2 * $k, 24.2 * $k, $half, self::TEXT);
-        imagefilledrectangle($img, (int) round(11.2 * $k - $half), (int) round(7.8 * $k), (int) round(11.2 * $k + $half), (int) round(24.2 * $k), $this->color($img, self::TEXT));
+        $this->disc($img, 11.2 * $k, 7.8 * $k, $half, $scheme['mark']);
+        $this->disc($img, 11.2 * $k, 24.2 * $k, $half, $scheme['mark']);
+        imagefilledrectangle($img, (int) round(11.2 * $k - $half), (int) round(7.8 * $k), (int) round(11.2 * $k + $half), (int) round(24.2 * $k), $this->color($img, $scheme['mark']));
 
-        // Bowl: an ink disc with a white disc punched in.
-        $this->disc($img, 16.9 * $k, 18.6 * $k, 6.7 * $k, self::TEXT);
-        $this->disc($img, 16.9 * $k, 18.6 * $k, 4.1 * $k, self::CARD);
+        // Bowl: a disc with the tile color punched in.
+        $this->disc($img, 16.9 * $k, 18.6 * $k, 6.7 * $k, $scheme['mark']);
+        $this->disc($img, 16.9 * $k, 18.6 * $k, 4.1 * $k, $scheme['tile']);
 
-        $this->disc($img, 23.6 * $k, 8.6 * $k, 2.3 * $k, self::ACCENT);
+        $this->disc($img, 23.6 * $k, 8.6 * $k, 2.3 * $k, $scheme['dot']);
 
         return $this->png($this->downsample($img, $size));
     }
 
     /**
-     * A scalloped "verified" rosette with a white check, in the profile's ink.
+     * A scalloped "verified" rosette with a check, in the look's colors.
      */
-    private function badge(int $size, string $ink): string
+    private function badge(int $size, string $ink, string $check): string
     {
         $big = $size * 4;
         $img = $this->transparent($big);
@@ -436,10 +570,10 @@ class OgImageRenderer
 
         $this->disc($img, $c, $c, $big * 0.36, $ink);
 
-        $white = $this->color($img, '#ffffff');
+        $tick = $this->color($img, $check);
         imagesetthickness($img, (int) round($big * 0.085));
-        imageline($img, (int) round($big * 0.32), (int) round($big * 0.52), (int) round($big * 0.45), (int) round($big * 0.65), $white);
-        imageline($img, (int) round($big * 0.45), (int) round($big * 0.65), (int) round($big * 0.69), (int) round($big * 0.38), $white);
+        imageline($img, (int) round($big * 0.32), (int) round($big * 0.52), (int) round($big * 0.45), (int) round($big * 0.65), $tick);
+        imageline($img, (int) round($big * 0.45), (int) round($big * 0.65), (int) round($big * 0.69), (int) round($big * 0.38), $tick);
 
         return $this->png($this->downsample($img, $size));
     }
@@ -534,6 +668,20 @@ class OgImageRenderer
                 }
             }
         }
+    }
+
+    /**
+     * $from blended toward $to by $amount (0..1), as hex.
+     */
+    private function mix(string $from, string $to, float $amount): string
+    {
+        $a = $this->rgb($from);
+        $b = $this->rgb($to);
+
+        return sprintf('#%02x%02x%02x', ...array_map(
+            fn (int $i) => (int) round($a[$i] + ($b[$i] - $a[$i]) * $amount),
+            [0, 1, 2],
+        ));
     }
 
     /**

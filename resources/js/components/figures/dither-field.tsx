@@ -13,7 +13,8 @@ type DitheringShape = NonNullable<DitheringProps['shape']>;
  * wash underneath is what the server renders.
  */
 
-export type DitherTone = 'mint' | 'sky' | 'violet' | 'amber' | 'rose';
+/** The five profile tones, plus ink: a black-and-white print owners can pick. */
+export type DitherTone = 'mint' | 'sky' | 'violet' | 'amber' | 'rose' | 'ink';
 
 export const PALETTE: Record<
     DitherTone,
@@ -43,6 +44,11 @@ export const PALETTE: Record<
         light: ['#f9c7d5', '#ec6a91'],
         dark: ['#5c1f33', '#ec7a9c'],
         wash: 'var(--rose-soft)',
+    },
+    ink: {
+        light: ['#d6d6d1', '#8a8a84'],
+        dark: ['#2e2e2b', '#9a9a93'],
+        wash: 'var(--secondary)',
     },
 };
 
@@ -187,4 +193,5 @@ export function seedFrom(value: string): number {
     return Math.abs(hash);
 }
 
+/** Tones a profile is seeded with (ink is only ever picked). */
 export const TONES: DitherTone[] = ['mint', 'sky', 'violet', 'amber', 'rose'];
