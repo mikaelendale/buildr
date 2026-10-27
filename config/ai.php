@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'default' => env('AI_DEFAULT_PROVIDER', 'anthropic'),
+    'default' => env('AI_DEFAULT_PROVIDER', 'openai'),
     'default_for_images' => 'gemini',
     'default_for_audio' => 'openai',
     'default_for_transcription' => 'openai',
@@ -133,7 +133,9 @@ return [
             'driver' => 'openai',
             'key' => env('OPENAI_API_KEY'),
             'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
-            'store' => env('OPENAI_STORE', true),
+            // Responses aren't kept as stored state on OpenAI's side. (This is not
+            // zero retention: abuse-monitoring logs may keep prompts up to 30 days.)
+            'store' => env('OPENAI_STORE', false),
         ],
 
         'openai-compatible' => [

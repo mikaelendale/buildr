@@ -272,10 +272,14 @@ class AiRunner
         return AiLanes::exhaustedKey($provider ?? (string) config('buildr.ai.provider'), $model);
     }
 
+    /**
+     * USD for one call. $input includes cached tokens and $output includes
+     * reasoning tokens (both billed as the SDK reports them). Unknown models
+     * are priced high on purpose, so the daily budget errs on the safe side.
+     */
     public function estimateCost(string $model, int $input, int $output, int $cacheRead = 0, int $cacheWrite = 0): float
     {
-        // Model names contain dots ("gemini-3.5-flash"), so no dot-notation lookup.
-        $price = ((array) config('buildr.ai.pricing', []))[$model] ?? ['input' => 4.0, 'output' => 20.0, 'cache_read' => 0.4];
+        $price = self::price($model) ?? ['input' => 4.0, 'output' => 20.0, 'cache_read' => 0.4];
 
         $uncached = max(0, $input - $cacheRead - $cacheWrite);
 
@@ -285,6 +289,20 @@ class AiRunner
             + $cacheRead * $price['cache_read']
             + $output * $price['output']
         ) / 1_000_000;
+    }
+
+    /**
+     * List price per million tokens, also for dated snapshots
+     * ("gpt-5-nano-2025-08-07" costs what "gpt-5-nano" does).
+     *
+     * @return array{input: float, output: float, cache_read: float}|null
+     */
+    public static function price(string $model): ?array
+    {
+        // Model names contain dots ("gpt-5.4-nano"), so no dot-notation lookup.
+        $pricing = (array) config('buildr.ai.pricing', []);
+
+        return $pricing[$model] ?? $pricing[(string) preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', $model)] ?? null;
     }
 
     /**
@@ -351,7 +369,12 @@ class AiRunner
         $seconds = is_numeric($header) ? (float) $header : null;
         $message = (string) $previous->response->json('error.message', '');
 
-        // Groq: "Please try again in 7.66s" / "in 13m13.5s" / "in 1h2m3s".
+        // OpenAI: "Please try again in 120ms".
+        if ($seconds === null && preg_match('/try again in ([\d.]+)ms\b/', $message, $m) === 1) {
+            $seconds = max(1.0, (float) $m[1] / 1000);
+        }
+
+        // Groq and OpenAI: "Please try again in 7.66s" / "in 13m13.5s" / "in 1h2m3s".
         if ($seconds === null && preg_match('/try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s/', $message, $m) === 1) {
             $seconds = (int) $m[1] * 3600 + (int) $m[2] * 60 + (float) $m[3];
         }
@@ -386,7 +409,9 @@ class AiRunner
         $previous = $e->getPrevious();
         $message = $previous instanceof RequestException ? (string) $previous->response->body() : '';
 
-        return preg_match('/per ?day|perday|daily/i', $message) === 1;
+        // OpenAI's "insufficient_quota": the account is out of credit, which no
+        // per-minute wait fixes; hold off like a spent daily cap.
+        return preg_match('/per ?day|perday|daily|insufficient_quota/i', $message) === 1;
     }
 
     /**
