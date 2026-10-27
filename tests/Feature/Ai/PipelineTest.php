@@ -7,6 +7,7 @@ use App\Enums\ProjectStatus;
 use App\Enums\SummaryMode;
 use App\Enums\SummaryStatus;
 use App\Jobs\Ai\ProcessChannel;
+use App\Jobs\Ai\RegenerateSection;
 use App\Models\AiRun;
 use App\Models\Channel;
 use App\Models\ChannelStat;
@@ -240,4 +241,38 @@ it('pauses on an exhausted provider quota and resumes from the same step', funct
     expect(ProcessChannel::resumeNow($channel->id))->toBeTrue()
         ->and(Cache::get(ProcessChannel::PAUSED_KEY))->not->toHaveKey($channel->id)
         ->and(Cache::get(ProcessChannel::resumeKey($channel->id)))->not->toBe($stale->resumeToken);
+});
+
+it('keeps both sections when two regenerations were asked for from the same version', function () {
+    $calls = 0;
+    $this->fakeAi(writer: function (string $prompt) use (&$calls) {
+        $calls++;
+        $posts = $this->payload($prompt)['posts'];
+
+        return [
+            'hook' => "Hook from write {$calls}.",
+            'hook_cites' => [$posts[0]['msg_id']],
+            'vibe_tags' => ['Builder'],
+            'intro' => "Intro from write {$calls}.",
+            'intro_cites' => [$posts[1]['msg_id']],
+            'building_now' => [],
+            'eras' => [],
+            'start_here' => [],
+            'in_their_words' => [],
+            'how_they_work' => null,
+            'fun_facts' => [],
+        ];
+    });
+    $channel = channelWithPosts();
+    ProcessChannel::dispatchSync($channel->id);
+    $first = Summary::where('channel_id', $channel->id)->latest('id')->first();
+
+    // Both asked for while $first was live; they run one after the other.
+    RegenerateSection::dispatchSync($channel->id, $first->id, 'hook', 'creator');
+    RegenerateSection::dispatchSync($channel->id, $first->id, 'intro', 'creator');
+
+    $live = Summary::where('channel_id', $channel->id)->whereIn('status', [SummaryStatus::Verified, SummaryStatus::Approved])->latest('id')->sole();
+
+    expect($live->content['hook'])->toBe('Hook from write 2.')
+        ->and($live->content['intro'])->toBe('Intro from write 3.');
 });

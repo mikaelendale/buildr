@@ -56,12 +56,17 @@ trait ConfiguresBuildrAgent
 
         // OpenAI (Responses API): the output cap (reasoning counts against it
         // and bills as output) and how hard the model thinks. Labelling,
-        // digests and descriptions need none; the writer, the fact-checker
-        // and the project resolver weigh evidence, so a little.
+        // digests and descriptions need none; the writer and the project
+        // resolver weigh evidence (BUILDR_AI_OPENAI_EFFORT); the fact-checker
+        // stays at low.
         if ($provider === 'openai') {
             return array_filter([
                 'max_output_tokens' => $this->outputTokenBudget(),
-                'reasoning' => self::openAiReasoning($this->model, in_array(class_basename($this), ['ProfileWriter', 'ClaimChecker', 'ProjectResolver'], true)),
+                'reasoning' => self::openAiReasoning($this->model, match (class_basename($this)) {
+                    'ProfileWriter', 'ProjectResolver' => (string) config('buildr.ai.openai_effort', 'low'),
+                    'ClaimChecker' => 'low',
+                    default => null,
+                }),
             ]);
         }
 
@@ -80,20 +85,21 @@ trait ConfiguresBuildrAgent
     }
 
     /**
-     * Reasoning effort for an OpenAI model, or null for models that don't
-     * reason (gpt-4.1, gpt-4o). The lowest setting differs by generation:
-     * gpt-5, -mini and -nano take "minimal", gpt-5.1 and later take "none".
+     * Reasoning effort for an OpenAI model ($effort, or the lowest setting
+     * when null), or null for models that don't reason (gpt-4.1, gpt-4o).
+     * The lowest differs by generation: gpt-5, -mini and -nano take
+     * "minimal", gpt-5.1 and later take "none".
      *
      * @return array{effort: string}|null
      */
-    public static function openAiReasoning(string $model, bool $weighsEvidence): ?array
+    public static function openAiReasoning(string $model, ?string $effort): ?array
     {
         if (preg_match('/^(gpt-5|o\d)/', $model) !== 1 || str_contains($model, '-chat')) {
             return null;
         }
 
-        if ($weighsEvidence) {
-            return ['effort' => 'low'];
+        if ($effort !== null) {
+            return ['effort' => $effort];
         }
 
         return ['effort' => preg_match('/^gpt-5(-mini|-nano)?(-\d{4}-\d{2}-\d{2})?$/', $model) === 1 ? 'minimal' : 'none'];
