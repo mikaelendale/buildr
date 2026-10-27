@@ -133,7 +133,8 @@ return [
             'driver' => 'openai',
             'key' => env('OPENAI_API_KEY'),
             'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
-            // Don't keep prompts (channel posts) on OpenAI's side.
+            // Responses aren't kept as stored state on OpenAI's side. (This is not
+            // zero retention: abuse-monitoring logs may keep prompts up to 30 days.)
             'store' => env('OPENAI_STORE', false),
         ],
 

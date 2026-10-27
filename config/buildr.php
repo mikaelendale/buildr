@@ -50,12 +50,12 @@ return [
     'ai' => [
         // Calls go through the Laravel AI SDK (config/ai.php holds the provider + key).
         // These four settings make one lane; BUILDR_AI_LANES below replaces them.
-        // Default: OpenAI's small models. gpt-5-nano labels posts and writes
-        // digests (high volume, minimal reasoning); gpt-5.6-luna writes,
-        // matches projects and fact-checks with a little reasoning
-        // (ConfiguresBuildrAgent). About a cent and two minutes per channel.
+        // Default: OpenAI's gpt-5.6-luna for every step. It labels posts and
+        // writes digests with no reasoning, and writes, matches projects and
+        // fact-checks with a little (ConfiguresBuildrAgent). About 2 cents
+        // and a minute or two per channel. (gpt-5-nano/-mini shut down 2026-12-11.)
         'provider' => env('BUILDR_AI_PROVIDER', 'openai'),
-        'extraction_model' => env('BUILDR_AI_EXTRACTION_MODEL', 'gpt-5-nano'),
+        'extraction_model' => env('BUILDR_AI_EXTRACTION_MODEL', 'gpt-5.6-luna'),
         'synthesis_model' => env('BUILDR_AI_SYNTHESIS_MODEL', 'gpt-5.6-luna'),
         'verify_model' => env('BUILDR_AI_VERIFY_MODEL', 'gpt-5.6-luna'),
         'prompt_version' => (int) env('BUILDR_AI_PROMPT_VERSION', 1),
@@ -96,8 +96,8 @@ return [
             ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite', 'tier' => 3, 'budget' => 'roomy', 'rpm' => 15, 'tpm' => 250000, 'timeout' => 240],
             ['provider' => 'gemini', 'model' => 'gemini-3.1-flash-lite-preview', 'tier' => 3, 'budget' => 'roomy', 'rpm' => 15, 'tpm' => 250000, 'timeout' => 240],
             ['provider' => 'groq', 'model' => 'openai/gpt-oss-20b', 'tier' => 3, 'budget' => 'compact', 'rpm' => 30, 'tpm' => 7500, 'timeout' => 300],
-            ['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'tier' => 1, 'budget' => 'standard'],
-            ['provider' => 'openai', 'model' => 'gpt-5-nano', 'tier' => 3, 'budget' => 'standard'],
+            // Tier 2 serves every step (labelling and writing alike).
+            ['provider' => 'openai', 'model' => 'gpt-5.6-luna', 'tier' => 2, 'budget' => 'standard'],
             ['provider' => 'anthropic', 'model' => 'claude-opus-5-5', 'tier' => 1, 'budget' => 'standard'],
             ['provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'tier' => 3, 'budget' => 'standard'],
         ],
@@ -197,6 +197,7 @@ return [
         // reasoning tokens bill as output. OpenAI rates checked 2026-10-27
         // against developers.openai.com/api/docs/pricing.
         'pricing' => [
+            // Shut down 2026-12-11; priced until then.
             'gpt-5-nano' => ['input' => 0.05, 'output' => 0.40, 'cache_read' => 0.005],
             'gpt-5-mini' => ['input' => 0.25, 'output' => 2.00, 'cache_read' => 0.025],
             'gpt-5.4-nano' => ['input' => 0.20, 'output' => 1.25, 'cache_read' => 0.02],

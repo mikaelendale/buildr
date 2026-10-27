@@ -64,7 +64,7 @@ Without a worker on the `scrape`, `ai` and `media` queues, onboarding waits at "
 
 Everything goes through the Laravel AI SDK; pick one in `.env` (all the options are in `.env.example`):
 
-- **OpenAI** (default): `OPENAI_API_KEY`. `gpt-5-nano` labels posts and writes month digests with minimal reasoning; `gpt-5.6-luna` writes, matches projects and fact-checks with a little. A channel of about 100 posts takes around two minutes and roughly a cent.
+- **OpenAI** (default): `OPENAI_API_KEY`. `gpt-5.6-luna` does every step: labelling posts and month digests with no reasoning, writing, project matching and fact-checking with a little. A channel of about 100 posts takes about a minute and 1-2 cents.
 - **Anthropic**: `ANTHROPIC_API_KEY` and the Claude models (commented in `.env.example`).
 - **Groq's free tier**: the Groq block, with `BUILDR_AI_BUDGET_PROFILE=compact` so calls are trimmed and paced to its 8K tokens a minute.
 - **Several free tiers in rotation**: `BUILDR_AI_LANES=gemini,groq` with both keys; when one runs out, the next takes over. Lane settings live in `config/buildr.php`.
