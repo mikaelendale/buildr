@@ -93,14 +93,11 @@ class DirectoryIndexer
         // Creators used to have their own rows; their channels carry them now.
         DirectoryEntry::where('listable_type', (new Creator)->getMorphClass())->delete();
 
-        Creator::published()->each(function (Creator $creator) use (&$count) {
-            $this->refreshCreator($creator);
-            $count += $creator->channels->where('claim_status', ChannelClaimStatus::Claimed)->count();
-        });
-
-        Channel::publishedUnclaimed()->each(function (Channel $channel) use (&$count) {
+        // Every channel decides for itself (hasPublicPage), so a claimed page
+        // whose owner is still in review is restored too, not just live owners.
+        Channel::query()->each(function (Channel $channel) use (&$count) {
             $this->refreshChannel($channel);
-            $count++;
+            $count += $channel->hasPublicPage() ? 1 : 0;
         });
 
         // Stale rows whose source vanished.

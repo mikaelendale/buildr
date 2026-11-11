@@ -124,6 +124,22 @@ it('rejects short links that are taken, reserved or malformed', function () {
     savePage($other, $main, ['slug' => 'mine-now'])->assertForbidden();
 });
 
+it('reindexing restores every channel with a public page and drops the rest', function () {
+    [$creator, $main] = creatorWithTwoChannels();
+    $onboarding = Creator::factory()->for(User::factory())->create(['slug' => 'abel']);
+    $stillPublic = Channel::factory()->claimedBy($onboarding)->create(['username' => 'abel_builds', 'visibility' => 'published', 'published_at' => now()]);
+    $notYet = Channel::factory()->claimedBy($onboarding)->create(['username' => 'abel_labs']);
+    $unclaimed = Channel::factory()->published()->create(['username' => 'open_channel']);
+    $main->update(['page_visible' => false]);
+
+    DirectoryEntry::query()->delete();
+    DirectoryEntry::create(['listable_type' => $notYet->getMorphClass(), 'listable_id' => $notYet->id, 'url_path' => '/c/abel_labs', 'name' => 'stale', 'published_at' => now()]);
+
+    expect(app(DirectoryIndexer::class)->rebuildAll())->toBe(3)
+        ->and(DirectoryEntry::orderBy('listable_id')->pluck('listable_id')->all())
+        ->toBe(collect([$creator->channels()->where('username', 'selam_labs')->value('id'), $stillPublic->id, $unclaimed->id])->sort()->values()->all());
+});
+
 it('keeps nameless and hidden channels off the profile and out of search', function () {
     [$creator, $main, $labs] = creatorWithTwoChannels();
     $creator->update(['real_name' => 'Selam Tesfaye']);
