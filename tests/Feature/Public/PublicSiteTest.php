@@ -68,6 +68,39 @@ it('renders the landing page with featured and trending profiles', function () {
         ->has('trending', 1));
 });
 
+it('displays active sponsored channels in the sponsored section on home', function () {
+    $creator = publishedCreator('selam', 'Selam', 'selambuilds');
+    $channel = $creator->channels()->first();
+
+    $sponsorship = \App\Models\Sponsorship::factory()
+        ->for($channel)
+        ->active()
+        ->create();
+
+    $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->has('sponsored', 1)
+        ->where('sponsored.0.name', 'Selambuilds')
+        ->where('sponsored.0.sponsored', true));
+});
+
+it('does not display expired or pending sponsorships on home', function () {
+    $creator = publishedCreator('selam', 'Selam', 'selambuilds');
+    $channel = $creator->channels()->first();
+
+    \App\Models\Sponsorship::factory()
+        ->for($channel)
+        ->expired()
+        ->create();
+
+    \App\Models\Sponsorship::factory()
+        ->for($channel)
+        ->pending()
+        ->create();
+
+    $this->get('/')->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->has('sponsored', 0));
+});
+
 it('ranks exact handles, names and Amharic names first', function () {
     publishedCreator('selam', 'Selam', 'selambuilds', ['real_name' => 'Selam Tesfaye', 'real_name_am' => 'ሰላም ተስፋዬ']);
     publishedCreator('dawit', 'Dawit', 'dawit_ai');

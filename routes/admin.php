@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\OperationsController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ReviewController;
 use App\Http\Controllers\Admin\SecurityController;
+use App\Http\Controllers\Admin\SponsorshipController;
 use App\Http\Controllers\Admin\SummarySectionController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
@@ -93,6 +94,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'auth.session', 'rol
         Route::post('featured', [CurationController::class, 'addFeatured'])->name('featured.store');
         Route::post('featured/reorder', [CurationController::class, 'reorderFeatured'])->name('featured.reorder');
         Route::delete('featured/{item}', [CurationController::class, 'removeFeatured'])->name('featured.destroy');
+
+        Route::get('featured/sponsorships', [SponsorshipController::class, 'featured'])->name('sponsorships.featured');
+        Route::post('sponsorships/{sponsorship}/approve', [SponsorshipController::class, 'approve'])->name('sponsorships.approve');
+        Route::post('sponsorships/{sponsorship}/reject', [SponsorshipController::class, 'reject'])->name('sponsorships.reject');
+        Route::post('sponsorships/{sponsorship}/end', [SponsorshipController::class, 'end'])->name('sponsorships.end');
 
         Route::get('tags', [CurationController::class, 'tags'])->name('tags');
         Route::post('tags', [CurationController::class, 'storeTag'])->name('tags.store');

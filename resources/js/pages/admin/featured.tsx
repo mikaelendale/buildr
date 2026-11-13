@@ -41,6 +41,15 @@ export default function Featured({ items, query, results }: Props) {
             title="Featured"
             description="The landing page carousel, in this order."
         >
+            <div className="mb-6 flex items-center justify-between">
+                <div />
+                <a
+                    href="/admin/featured/sponsorships"
+                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                    Manage sponsorships →
+                </a>
+            </div>
             <Tray label="On the landing page" meta={items.length}>
                 {items.length === 0 ? (
                     <EmptyState glyph="spark">

@@ -60,6 +60,7 @@ type Props = {
         dropped: number;
         has_live: boolean;
     }[];
+    pendingSponsorships: number;
 };
 
 const PROFILE: Record<
@@ -197,6 +198,7 @@ export default function ReviewQueue({
     channels,
     fieldChanges,
     failed,
+    pendingSponsorships,
 }: Props) {
     const [busy, setBusy] = useState<BulkAction | null>(null);
     const creatorSel = useSelection(creators.map((c) => c.id));
@@ -224,7 +226,8 @@ export default function ReviewQueue({
         creators.length +
             channels.length +
             fieldChanges.length +
-            failed.length ===
+            failed.length +
+            pendingSponsorships ===
         0;
 
     return (
@@ -233,6 +236,17 @@ export default function ReviewQueue({
             description="Oldest first. Tick rows to act on many at once. Approving and publishing message the creator; everything lands in the audit log."
             wide
         >
+            {pendingSponsorships > 0 && (
+                <div className="mb-4 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
+                    <a
+                        href="/admin/featured/sponsorships"
+                        className="font-medium hover:underline"
+                    >
+                        {pendingSponsorships} pending sponsorship{pendingSponsorships !== 1 ? 's' : ''} waiting for review →
+                    </a>
+                </div>
+            )}
+
             {empty && (
                 <div className="surface">
                     <EmptyState glyph="spark">

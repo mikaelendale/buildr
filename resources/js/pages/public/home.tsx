@@ -14,6 +14,7 @@ import type { ProfileCard as Card, TagChip } from '@/types';
 
 type Props = {
     featured: Card[];
+    sponsored: (Card & { sponsored?: boolean })[];
     trending: Card[];
     recent: Card[];
     tags: TagChip[];
@@ -37,6 +38,7 @@ const POINTS: { glyph: GlyphName; body: string }[] = [
 
 export default function Home({
     featured,
+    sponsored,
     trending,
     recent,
     tags,
@@ -202,6 +204,29 @@ export default function Home({
                                         card={card}
                                         className="w-[280px] shrink-0 snap-start"
                                     />
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {sponsored.length > 0 && (
+                        <section>
+                            <SectionHeading
+                                lead="Sponsored"
+                                title="channels."
+                                description="Promoted by creators building in public."
+                            />
+                            <div className="-mx-5 flex snap-x snap-mandatory scroll-px-5 scrollbar-none gap-3 overflow-x-auto px-5 pt-1 pb-3">
+                                {sponsored.map((card) => (
+                                    <div key={card.url} className="relative w-[280px] shrink-0 snap-start">
+                                        <ProfileCard card={card} />
+                                        <div className="absolute top-3 right-3">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber/20 px-2.5 py-1 text-xs font-medium text-amber">
+                                                <span className="size-1.5 rounded-full bg-amber" />
+                                                Sponsored
+                                            </span>
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         </section>

@@ -9,6 +9,7 @@ use App\Models\Creator;
 use App\Models\Post;
 use App\Models\Project;
 use App\Models\Report;
+use App\Models\Sponsorship;
 use App\Models\Summary;
 use App\Models\User;
 use App\Services\Search\PostgresSearch;
@@ -109,6 +110,7 @@ class AppServiceProvider extends ServiceProvider
             'claim' => Claim::class,
             'report' => Report::class,
             'announcement' => Announcement::class,
+            'sponsorship' => Sponsorship::class,
         ]);
     }
 

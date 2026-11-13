@@ -8,6 +8,7 @@ import {
     PenLine,
     Plus,
     Settings2,
+    Sparkles,
     Star,
     Trash2,
     X,
@@ -34,9 +35,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { formatCount } from '@/lib/format';
+import { formatCount, formatDate } from '@/lib/format';
 import { requestJson } from '@/lib/http';
 import type { ChannelChip } from '@/types';
+
+type SponsorshipInfo = {
+    id: number;
+    status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
+    starts_at: string | null;
+    review_note: string | null;
+};
 
 type Channel = ChannelChip & {
     id: number;
@@ -51,6 +59,7 @@ type Channel = ChannelChip & {
         show_owner: boolean;
         live: boolean;
     };
+    sponsorship: SponsorshipInfo | null;
 };
 
 type Props = {
@@ -82,6 +91,7 @@ export default function ChannelsPage({
     const [renaming, setRenaming] = useState<Channel | null>(null);
     const [removing, setRemoving] = useState<Channel | null>(null);
     const [editingPage, setEditingPage] = useState<Channel | null>(null);
+    const [sponsoring, setSponsoring] = useState<Channel | null>(null);
 
     return (
         <PageContainer
@@ -99,6 +109,7 @@ export default function ChannelsPage({
                 <ul className="surface divide-y divide-border/70 overflow-hidden">
                     {channels.map((channel) => {
                         const progress = progressFor(channel.id);
+                        const sp = channel.sponsorship;
 
                         return (
                             <li
@@ -131,6 +142,16 @@ export default function ChannelsPage({
                                                 )}
                                             </Badge>
                                         )}
+                                        {sp?.status === 'pending' && (
+                                            <Badge variant="amber">
+                                                Promotion pending
+                                            </Badge>
+                                        )}
+                                        {sp?.status === 'approved' && (
+                                            <Badge variant="mint">
+                                                Sponsored
+                                            </Badge>
+                                        )}
                                     </div>
                                     <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                                         @{channel.username} ·{' '}
@@ -157,6 +178,14 @@ export default function ChannelsPage({
                                             Make main
                                         </Button>
                                     )}
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setSponsoring(channel)}
+                                    >
+                                        <Sparkles />
+                                        Promote
+                                    </Button>
                                     <Button
                                         size="sm"
                                         variant="ghost"
@@ -278,6 +307,12 @@ export default function ChannelsPage({
                     onClose={() => setEditingPage(null)}
                 />
             )}
+            {sponsoring && (
+                <SponsorshipDialog
+                    channel={sponsoring}
+                    onClose={() => setSponsoring(null)}
+                />
+            )}
         </PageContainer>
     );
 }
@@ -339,6 +374,221 @@ function PageLine({
                 Page settings
             </Button>
         </div>
+    );
+}
+
+/**
+ * Request or track homepage promotion for a channel.
+ * States: none → request; pending → cancel; approved (active) → info;
+ * rejected → reason + re-request; expired → ended + re-request.
+ */
+function SponsorshipDialog({
+    channel,
+    onClose,
+}: {
+    channel: Channel;
+    onClose: () => void;
+}) {
+    const sp = channel.sponsorship;
+    const [busy, setBusy] = useState(false);
+
+    const request = () => {
+        setBusy(true);
+        router.post(
+            `/dashboard/channels/${channel.id}/sponsorship`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: onClose,
+                onFinish: () => setBusy(false),
+            },
+        );
+    };
+
+    const cancel = () => {
+        if (!sp) return;
+        setBusy(true);
+        router.delete(`/dashboard/sponsorships/${sp.id}`, {
+            preserveScroll: true,
+            onSuccess: onClose,
+            onFinish: () => setBusy(false),
+        });
+    };
+
+    // Pending: waiting on admin review.
+    if (sp?.status === 'pending') {
+        return (
+            <Dialog open onOpenChange={(open) => !open && onClose()}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Promotion pending</DialogTitle>
+                        <DialogDescription>
+                            Your request to feature{' '}
+                            <span className="font-mono font-medium">
+                                @{channel.username}
+                            </span>{' '}
+                            on the homepage is waiting for review.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        We&apos;ll message you on Telegram when it&apos;s been
+                        decided.
+                    </p>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={cancel}
+                            disabled={busy}
+                        >
+                            Cancel request
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    // Approved and currently active.
+    if (sp?.status === 'approved') {
+        return (
+            <Dialog open onOpenChange={(open) => !open && onClose()}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Badge variant="mint">Sponsored</Badge>
+                            {channel.username}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Your channel is featured in the Sponsored section on
+                            the Buildr homepage.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {sp.starts_at && (
+                        <p className="text-sm text-muted-foreground">
+                            Active since{' '}
+                            <span className="font-medium text-foreground">
+                                {formatDate(sp.starts_at)}
+                            </span>
+                            .
+                        </p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                        Only an admin can end a sponsored placement. Contact
+                        support if you&apos;d like it removed.
+                    </p>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={onClose}>
+                            Done
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    // Rejected: show reason and allow a new request.
+    if (sp?.status === 'rejected') {
+        return (
+            <Dialog open onOpenChange={(open) => !open && onClose()}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Request not approved</DialogTitle>
+                        <DialogDescription>
+                            Your promotion request for{' '}
+                            <span className="font-mono font-medium">
+                                @{channel.username}
+                            </span>{' '}
+                            was not approved.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {sp.review_note && (
+                        <p className="rounded-xl bg-secondary px-4 py-3 text-sm text-foreground/80">
+                            {sp.review_note}
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={onClose}
+                        >
+                            Dismiss
+                        </Button>
+                        <Button onClick={request} disabled={busy}>
+                            Request again
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    // Expired: approved but the window has closed; allow a new request.
+    if (sp?.status === 'expired') {
+        return (
+            <Dialog open onOpenChange={(open) => !open && onClose()}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Sponsorship ended</DialogTitle>
+                        <DialogDescription>
+                            The sponsored placement for{' '}
+                            <span className="font-mono font-medium">
+                                @{channel.username}
+                            </span>{' '}
+                            has ended.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        You can request a new promotion at any time.
+                    </p>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={onClose}
+                        >
+                            Dismiss
+                        </Button>
+                        <Button onClick={request} disabled={busy}>
+                            Request again
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    // Default: no request yet (or previously cancelled — no row shown).
+    return (
+        <Dialog open onOpenChange={(open) => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Get featured on the homepage</DialogTitle>
+                    <DialogDescription>
+                        Request sponsored placement for{' '}
+                        <span className="font-mono font-medium">
+                            @{channel.username}
+                        </span>{' '}
+                        in the Sponsored section. An admin reviews every
+                        request.
+                    </DialogDescription>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground">
+                    If approved, your channel will appear on the Buildr homepage
+                    and you&apos;ll be notified on Telegram.
+                </p>
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        onClick={onClose}
+                    >
+                        Not now
+                    </Button>
+                    <Button onClick={request} disabled={busy}>
+                        <Sparkles />
+                        Request promotion
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 
