@@ -20,6 +20,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Sponsorships
+    |--------------------------------------------------------------------------
+    |
+    | Creators request homepage placement for a claimed channel; an admin
+    | approves or rejects. No payments yet — this caps how many of one
+    | creator's channels can be sponsored at once so the homepage stays
+    | mostly organic.
+    |
+    */
+
+    'sponsorships' => [
+        'max_active_per_creator' => (int) env('BUILDR_MAX_ACTIVE_SPONSORSHIPS', 1),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Scraping
     |--------------------------------------------------------------------------
     */

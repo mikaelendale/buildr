@@ -222,6 +222,14 @@ class Channel extends Model
     }
 
     /**
+     * @return HasMany<Sponsorship, $this>
+     */
+    public function sponsorships(): HasMany
+    {
+        return $this->hasMany(Sponsorship::class);
+    }
+
+    /**
      * @param  Builder<self>  $query
      */
     public function scopePublishedUnclaimed(Builder $query): void

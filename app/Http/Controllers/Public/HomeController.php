@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Creator;
 use App\Models\DirectoryEntry;
 use App\Models\FeaturedItem;
+use App\Models\Sponsorship;
 use App\Models\Tag;
 use App\Services\Analytics\ViewTracker;
 use Illuminate\Http\Request;
@@ -37,8 +38,21 @@ class HomeController extends Controller
             ->map(fn (DirectoryEntry $entry) => $entry->toCard())
             ->values();
 
+        // Sponsored channels: currently active sponsorships with visible directory entries.
+        $sponsored = Sponsorship::active()
+            ->with('channel')
+            ->get()
+            ->map(fn (Sponsorship $s) => DirectoryEntry::visible()
+                ->where('listable_type', 'channel')
+                ->where('listable_id', $s->channel_id)
+                ->first())
+            ->filter()
+            ->map(fn (DirectoryEntry $entry) => $entry->toCard() + ['sponsored' => true])
+            ->values();
+
         return Inertia::render('public/home', [
             'featured' => $featured,
+            'sponsored' => $sponsored,
             'trending' => DirectoryEntry::visible()
                 ->orderByDesc('trending_score')
                 ->orderByDesc('subscribers')

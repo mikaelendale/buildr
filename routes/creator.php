@@ -10,6 +10,7 @@ use App\Http\Controllers\Creator\OnboardingController;
 use App\Http\Controllers\Creator\ProfileController;
 use App\Http\Controllers\Creator\ProjectController;
 use App\Http\Controllers\Creator\SettingsController;
+use App\Http\Controllers\Creator\SponsorshipController;
 use App\Http\Controllers\Creator\SummaryController;
 use App\Http\Controllers\Creator\TelegramController;
 use App\Http\Controllers\Public\ClaimPageController;
@@ -104,6 +105,9 @@ Route::middleware(['auth', 'auth.session', 'role:creator'])->group(function () {
         Route::post('channels/{channel}/rename', [ChannelController::class, 'rename'])->middleware('throttle:10,1')->name('channels.rename');
         Route::put('channels/{channel}/page', [ChannelController::class, 'page'])->name('channels.page');
         Route::delete('channels/{channel}', [ChannelController::class, 'destroy'])->name('channels.destroy');
+
+        Route::post('channels/{channel}/sponsorship', [SponsorshipController::class, 'store'])->middleware('throttle:10,1')->name('channels.sponsorship.store');
+        Route::delete('sponsorships/{sponsorship}', [SponsorshipController::class, 'cancel'])->name('sponsorships.cancel');
 
         Route::put('share-card/{type}/{id}', CardStyleController::class)->whereNumber('id')->middleware('throttle:30,1')->name('share-card.style');
 

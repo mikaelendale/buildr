@@ -7,6 +7,7 @@ use App\Enums\ChannelReviewStatus;
 use App\Enums\ClaimPurpose;
 use App\Enums\ClaimStatus;
 use App\Enums\CreatorStatus;
+use App\Enums\SponsorshipStatus;
 use App\Enums\SummaryStatus;
 use App\Http\Controllers\Controller;
 use App\Jobs\Ai\ProcessChannel;
@@ -14,6 +15,7 @@ use App\Models\AuditLog;
 use App\Models\Channel;
 use App\Models\Claim;
 use App\Models\Creator;
+use App\Models\Sponsorship;
 use App\Models\Summary;
 use App\Services\Admin\AdminActions;
 use App\Services\Admin\ReviewFlags;
@@ -54,6 +56,8 @@ class ReviewController extends Controller
             ->with('channel')
             ->orderBy('created_at')
             ->get();
+        $pendingSponsorships = Sponsorship::where('status', SponsorshipStatus::Pending->value)
+            ->count();
 
         return Inertia::render('admin/review/index', [
             'creators' => $creators->map(fn (Creator $c) => [
@@ -91,6 +95,7 @@ class ReviewController extends Controller
                 'dropped' => count((array) ($s->verification['dropped'] ?? [])),
                 'has_live' => Summary::where('channel_id', $s->channel_id)->whereIn('status', [SummaryStatus::Verified, SummaryStatus::Approved])->exists(),
             ]),
+            'pendingSponsorships' => $pendingSponsorships,
         ]);
     }
 

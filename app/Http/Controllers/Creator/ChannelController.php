@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Creator;
 use App\Enums\ChannelClaimStatus;
 use App\Enums\ClaimPurpose;
 use App\Enums\ClaimStatus;
+use App\Enums\SponsorshipStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Channel;
 use App\Models\Claim;
 use App\Models\Creator;
+use App\Models\Sponsorship;
 use App\Services\Claims\ClaimException;
 use App\Services\Claims\ClaimService;
 use App\Services\Claims\OwnershipActions;
@@ -36,20 +38,41 @@ class ChannelController extends Controller
         $user = $request->user();
         $creator = $user->creator;
 
+        $channels = $creator->channels()->where('claim_status', ChannelClaimStatus::Claimed)->with('creator.user')->get();
+
+        // Load the most-recent actionable sponsorship per channel in one query.
+        // We exclude only statuses that are fully terminal and have no display
+        // value (cancelled). Rejected rows are kept so the creator can see why.
+        $sponsorships = Sponsorship::whereIn('channel_id', $channels->pluck('id'))
+            ->whereNotIn('status', [SponsorshipStatus::Cancelled->value])
+            ->latest()
+            ->get()
+            ->keyBy('channel_id');
+
         return Inertia::render('dashboard/channels', [
-            'channels' => $creator->channels()->where('claim_status', ChannelClaimStatus::Claimed)->with('creator.user')->get()
-                ->map(fn (Channel $c) => $pages->channelChip($c, $c->id === $creator->primary_channel_id) + [
-                    'id' => $c->id,
-                    'availability' => $c->availability->value,
-                    'last_scraped_at' => $c->last_scraped_at?->toIso8601String(),
-                    'page' => [
-                        'slug' => $c->slug,
-                        'suggested_slug' => $c->slug === null ? $slugs->suggestForChannel($c) : null,
-                        'visible' => $c->page_visible,
-                        'show_owner' => $c->show_owner,
-                        'live' => $c->hasPublicPage(),
-                    ],
-                ])->values(),
+            'channels' => $channels
+                ->map(function (Channel $c) use ($pages, $creator, $slugs, $sponsorships) {
+                    $s = $sponsorships->get($c->id);
+
+                    return $pages->channelChip($c, $c->id === $creator->primary_channel_id) + [
+                        'id' => $c->id,
+                        'availability' => $c->availability->value,
+                        'last_scraped_at' => $c->last_scraped_at?->toIso8601String(),
+                        'page' => [
+                            'slug' => $c->slug,
+                            'suggested_slug' => $c->slug === null ? $slugs->suggestForChannel($c) : null,
+                            'visible' => $c->page_visible,
+                            'show_owner' => $c->show_owner,
+                            'live' => $c->hasPublicPage(),
+                        ],
+                        'sponsorship' => $s === null ? null : [
+                            'id' => $s->id,
+                            'status' => $s->effectiveStatus(),
+                            'starts_at' => $s->starts_at?->toIso8601String(),
+                            'review_note' => $s->review_note,
+                        ],
+                    ];
+                })->values(),
             'profileUrl' => $creator->url(),
             'profileLive' => $creator->isPublished(),
             'claims' => Claim::where('user_id', $user->id)
